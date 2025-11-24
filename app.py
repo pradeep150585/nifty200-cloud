@@ -1,52 +1,59 @@
+# app.py
 import streamlit as st
 import subprocess
-import time
 import os
+import time
+from pathlib import Path
 
 st.set_page_config(page_title="Nifty200 Scanner", layout="wide")
+st.title("📊 NIFTY 200 Technical Scanner (Streamlit Community Cloud)")
+st.write("Click **Run Full Scanner** to run your pipeline. Output is streamed below.")
 
-st.title("📊 NIFTY 200 Technical Scanner")
-st.write("Run all timeframes (5M / 15M / 30M / Daily) in cloud and view console output.")
+# Safety: required files check
+required = ["run_all.py", "5M.py", "15M.py", "30M.py", "Daily.py"]
+missing = [f for f in required if not Path(f).exists()]
+if missing:
+    st.error("Missing files in repo root: " + ", ".join(missing))
+    st.stop()
 
-# -------- Function to run script and stream output -------- #
-def run_script_live():
-    process = subprocess.Popen(
-        ["python", "run_all.py"],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True
-    )
+def stream_process(cmd):
+    """Run subprocess and yield stdout lines as they appear (text mode)."""
+    # Use universal_newlines/text mode to get strings, and bufsize=1 for line buffering
+    proc = subprocess.Popen(cmd,
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT,
+                            bufsize=1,
+                            universal_newlines=True,
+                            env=os.environ.copy())
 
-    output_placeholder = st.empty()
+    # Stream every line
+    for stdout_line in proc.stdout:
+        yield stdout_line
+    proc.stdout.close()
+    returncode = proc.wait()
+    yield f"\n[PROCESS FINISHED with return code {returncode}]\n"
 
-    full_output = ""
-
-    for line in process.stdout:
-        full_output += line
-        output_placeholder.text(full_output)
-
-    errors = process.stderr.read()
-    if errors.strip():
-        st.error("⚠ Errors encountered:")
-        st.text(errors)
-
-    return full_output
-
-
-# -------------------- UI -------------------- #
 if st.button("🚀 RUN FULL SCANNER"):
-    st.write("Running scripts... please wait. This may take a few minutes.")
-    final_output = run_script_live()
+    st.info("Starting scanner — output will stream below. This may take 1–4 minutes depending on network and compute.")
+    log_area = st.empty()
+    logs = ""
+    # Run via same Python executable
+    py = os.getenv("PYTHON", "python")
+    cmd = [py, "run_all.py"]
+    for chunk in stream_process(cmd):
+        logs += chunk
+        # Keep only last ~200 lines in UI to keep it responsive
+        lines = logs.splitlines()
+        if len(lines) > 400:
+            lines = lines[-400:]
+            logs = "\n".join(lines) + "\n"
+        # show as code block for fixed-width
+        log_area.code(logs)
+    st.success("Run finished. If an Excel file was produced, it will appear below (if available).")
 
-    st.success("✅ SCAN COMPLETED")
-
-    st.subheader("📥 Download Final Excel Output")
-    if os.path.exists("Nifty200_Consolidated_Output.xlsx"):
-        with open("Nifty200_Consolidated_Output.xlsx", "rb") as f:
-            st.download_button(
-                "Download Consolidated Excel",
-                data=f,
-                file_name="Nifty200_Consolidated_Output.xlsx"
-            )
+    out_path = Path("Nifty200_Consolidated_Output.xlsx")
+    if out_path.exists():
+        with out_path.open("rb") as f:
+            st.download_button("Download consolidated Excel", data=f, file_name=out_path.name)
     else:
-        st.warning("Final output file not generated.")
+        st.warning("Consolidated Excel not found. Check logs for errors.")
