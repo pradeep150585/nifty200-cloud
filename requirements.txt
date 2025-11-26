@@ -1,4 +1,3 @@
---upgrade pip
 streamlit
 pandas
 numpy
@@ -6,3 +5,4 @@ requests
 yfinance
 tqdm
 openpyxl
+
