@@ -38,8 +38,8 @@ if st.button("🚀 RUN FULL SCANNER"):
     log_area = st.empty()
     logs = ""
     # Run via same Python executable
-    py = os.getenv("PYTHON", "python")
-    cmd = [py, "run_all.py"]
+    import sys
+    cmd = [sys.executable, "run_all.py"]
     for chunk in stream_process(cmd):
         logs += chunk
         # Keep only last ~200 lines in UI to keep it responsive
@@ -57,3 +57,4 @@ if st.button("🚀 RUN FULL SCANNER"):
             st.download_button("Download consolidated Excel", data=f, file_name=out_path.name)
     else:
         st.warning("Consolidated Excel not found. Check logs for errors.")
+
