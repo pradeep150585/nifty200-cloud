@@ -38,10 +38,10 @@ NIFTY200_URL = "https://archives.nseindia.com/content/indices/ind_nifty200list.c
 YFINANCE_PERIOD = "60d"
 YFINANCE_INTERVAL = "30m"
 OUTPUT_FILENAME = "Nifty200_Weighted_Balanced_30m_fixed.xlsx"
-BATCH_SIZE = 40
+BATCH_SIZE = 20
 MOM_PERIOD = 10
 MIN_ROWS_REQUIRED = 80
-MAX_WORKERS = 8
+MAX_WORKERS = 6
 SLEEP_BETWEEN_BATCHES = 0.5
 
 # -----------------------
@@ -457,3 +457,4 @@ if __name__ == "__main__":
             print(strong_sell[["Symbol", "CMP", "Change%", "Weighted_Net_Score"]].to_string(index=False))
 
         print("\nScan completed.")
+
