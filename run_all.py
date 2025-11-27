@@ -7,10 +7,10 @@ from time import sleep
 # -----------------------------
 # CONFIG: Output filenames
 # -----------------------------
-FILE_5M  = "Nifty200_Weighted_Balanced_5m_fixed.xlsx"
-FILE_15M = "Nifty200_Weighted_Balanced_15m_fixed.xlsx"
-FILE_30M = "Nifty200_Weighted_Balanced_30m_fixed.xlsx"
-FILE_1D  = "Nifty200_Weighted_Balanced_1d_fixed.xlsx"
+FILE_5M  = "Nifty200_Weighted_Balanced_5M_fixed.xlsx"
+FILE_15M = "Nifty200_Weighted_Balanced_15M_fixed.xlsx"
+FILE_30M = "Nifty200_Weighted_Balanced_30M_fixed.xlsx"
+FILE_1D  = "Nifty200_Weighted_Balanced_1D_fixed.xlsx"
 
 CONSOLIDATED_OUTPUT = "Nifty200_Consolidated_Output.xlsx"
 
@@ -187,3 +187,4 @@ if __name__ == "__main__":
     consolidate_outputs()
 
     print("\n🌟 All tasks completed successfully!\n")
+
