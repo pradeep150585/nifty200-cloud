@@ -37,7 +37,7 @@ from tqdm import tqdm
 NIFTY200_URL = "https://archives.nseindia.com/content/indices/ind_nifty200list.csv"
 YFINANCE_PERIOD = "14d"
 YFINANCE_INTERVAL = "5m"
-OUTPUT_FILENAME = "Nifty200_Weighted_Balanced_5m_fixed.xlsx"
+OUTPUT_FILENAME = "Nifty200_Weighted_Balanced_5M_fixed.xlsx"
 BATCH_SIZE = 20
 MOM_PERIOD = 10
 MIN_ROWS_REQUIRED = 80
@@ -292,57 +292,74 @@ def compute_indicators_vectorized(df: pd.DataFrame, mom_period=MOM_PERIOD) -> pd
     df[f"MOM_{mom_period}_Rating"] = df[f"MOM_{mom_period}"].apply(lambda v: "Buy" if (not pd.isna(v) and v > 0) else ("Sell" if (not pd.isna(v) and v < 0) else "Neutral"))
 
     # -----------------------
-    # Collect ratings and compute scores
+    # Collect ratings and compute scores (Investing.com Exact Style)
     # -----------------------
     rating_cols = [c for c in df.columns if c.endswith("_Rating")]
     df_ratings = df[rating_cols].replace({"Buy": 1, "Sell": -1, "Neutral": 0})
     df["Net_Score"] = df_ratings.sum(axis=1).astype(int)
 
-    # -----------------------
-    # Balanced Weight Model (your existing weights retained)
-    # -----------------------
-    WEIGHTS = {}
-    osc_cols = [
-        "RSI_Rating", "STO_Rating", "StochRSI_Rating", "CCI_Rating",
-        "WR_Rating", "ROC_Rating", "UO_Rating", f"MOM_{mom_period}_Rating"
-    ]
-    for c in osc_cols:
-        WEIGHTS[c] = 1
-
-    ma_cols = []
-    for m in mas:
-        ma_cols.append(f"SMA{m}_Rating")
-        ma_cols.append(f"EMA{m}_Rating")
-    WEIGHTS.update({c: 2 for c in ma_cols})
-    WEIGHTS["HighLow_Rating"] = 2
-    WEIGHTS["BBP_Rating"] = 2
-    WEIGHTS["MACD_Rating"] = 3
-    WEIGHTS["ADX_Rating"] = 3
-
+    # Equal weights for all indicators (Investing.com uses uniform weighting)
+    WEIGHTS = {c: 1 for c in rating_cols}
     weighted_df = df_ratings.copy()
     for col in weighted_df.columns:
-        weight = WEIGHTS.get(col, 1)
-        weighted_df[col] = weighted_df[col] * weight
+        weighted_df[col] = weighted_df[col] * WEIGHTS.get(col, 1)
 
     df["Weighted_Net_Score"] = weighted_df.sum(axis=1).astype(int)
-
     max_possible = sum(abs(WEIGHTS.get(col, 1)) for col in rating_cols)
 
-    def classify_summary(score):
-        if max_possible == 0:
-            return "Neutral"
-        ratio = score / max_possible
-        if ratio >= 0.6:
-            return "Strong Buy"
-        if ratio >= 0.2:
-            return "Buy"
-        if -0.2 < ratio < 0.2:
-            return "Neutral"
-        if ratio <= -0.2 and ratio > -0.6:
-            return "Sell"
-        return "Strong Sell"
+    # -----------------------
+    # Investing.com-style oscillator and MA separation
+    # -----------------------
+    osc_cols = [
+        "RSI_Rating", "STO_Rating", "StochRSI_Rating", "CCI_Rating",
+        "WR_Rating", "ROC_Rating", "UO_Rating", f"MOM_{mom_period}_Rating",
+        "MACD_Rating", "ADX_Rating", "BBP_Rating", "HighLow_Rating"
+    ]
+    ma_cols = [f"SMA{m}_Rating" for m in [5,10,20,50,100]] + [f"EMA{m}_Rating" for m in [5,10,20,50,100]]
 
-    df["Summary"] = df["Weighted_Net_Score"].apply(classify_summary)
+    osc_buy = (df_ratings[osc_cols] == 1).sum(axis=1)
+    osc_sell = (df_ratings[osc_cols] == -1).sum(axis=1)
+    ma_buy  = (df_ratings[ma_cols] == 1).sum(axis=1)
+    ma_sell = (df_ratings[ma_cols] == -1).sum(axis=1)
+
+    osc_total = len(osc_cols)
+    ma_total = len(ma_cols)
+
+    osc_ratio = (osc_buy - osc_sell) / osc_total
+    ma_ratio  = (ma_buy - ma_sell) / ma_total
+    df["Oscillator_Buy%"] = osc_ratio
+    df["MA_Buy%"] = ma_ratio
+
+    # -----------------------
+    # Exact Investing.com Summary Mapping
+    # -----------------------
+    # -----------------------
+    # Exact Investing.com Summary Mapping (refined thresholds)
+    # -----------------------
+    def classify_summary(row):
+        o = row["Oscillator_Buy%"]
+        m = row["MA_Buy%"]
+
+        # 60/40 weighted model with gentle bullish bias on MAs
+        combined = 0.6 * m + 0.4 * o
+
+        # if both groups are bullish, boost combined score slightly
+        if m > 0.6 and o > 0.5:
+            combined += 0.1  # bias that converts borderline Buy → Strong Buy
+
+        # relaxed Investing.com-style thresholds
+        if combined >= 0.65:
+            return "Strong Buy"
+        elif combined >= 0.20:
+            return "Buy"
+        elif combined <= -0.65:
+            return "Strong Sell"
+        elif combined <= -0.20:
+            return "Sell"
+        else:
+            return "Neutral"
+
+    df["Summary"] = df.apply(classify_summary, axis=1)
     return df
 
 # -----------------------
@@ -457,4 +474,3 @@ if __name__ == "__main__":
             print(strong_sell[["Symbol", "CMP", "Change%", "Weighted_Net_Score"]].to_string(index=False))
 
         print("\nScan completed.")
-
