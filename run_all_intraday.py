@@ -24,7 +24,7 @@ def run_script(script_name):
     print(f"\n🔥 Running: {script_name} ...\n")
 
     process = subprocess.Popen(
-        ["python", "-X", "utf8", script_name],
+        [sys.executable, "-X", "utf8", script_name],
         stdout=subprocess.DEVNULL,       # Don't read stdout (avoids blocking)
         stderr=subprocess.PIPE           # Capture raw bytes
     )
