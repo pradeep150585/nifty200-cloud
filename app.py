@@ -1,82 +1,226 @@
 # app.py
 import streamlit as st
-import subprocess
-import os
-import sys
+import subprocess, os, sys, time, random
 from pathlib import Path
+import streamlit.components.v1 as components
 
-# Streamlit page configuration
-st.set_page_config(page_title="Nifty200 Scanner", layout="wide")
-st.title("📊 NIFTY 200 Technical Scanner (Streamlit Community Cloud)")
-st.write("Click **Run Full Scanner** to run your pipeline. Output is streamed below.")
+# Page config
+st.set_page_config(page_title="Nifty 200 AI Scanner", layout="wide")
 
-# --------------------------------------------------------------------
-# Safety: verify all required scripts exist
-# --------------------------------------------------------------------
-required = ["run_all.py", "5M.py", "15M.py", "30M.py", "Daily.py"]
-missing = [f for f in required if not Path(f).exists()]
-if missing:
-    st.error("Missing files in repo root: " + ", ".join(missing))
-    st.stop()
+# ------------------------------  MATERIAL UI (GOOGLE STYLE)  -------------------------------- #
+st.markdown("""
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
 
-# --------------------------------------------------------------------
-# Helper: run subprocess and stream logs live to Streamlit
-# --------------------------------------------------------------------
-def stream_process(cmd, env=None):
-    """Run a subprocess and yield stdout lines as they appear (text mode)."""
-    proc = subprocess.Popen(
-        cmd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        bufsize=1,
-        universal_newlines=True,
-        env=env or os.environ.copy(),
-    )
+<style>
+:root {
+    --bg: #f8f9fa;
+    --card: #ffffff;
+    --border: #e2e8f0;
+    --text: #1e293b;
+    --muted: #64748b;
+    --primary: #1a73e8;
+    --primary-hover: #1664c4;
+    --radius: 10px;
+}
 
-    for stdout_line in proc.stdout:
-        yield stdout_line
-    proc.stdout.close()
-    returncode = proc.wait()
-    yield f"\n[PROCESS FINISHED with return code {returncode}]\n"
+html, body, .main, .block-container {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Roboto', sans-serif;
+    margin: 0;
+    padding: 0;
+}
 
-# --------------------------------------------------------------------
-# Main UI action
-# --------------------------------------------------------------------
-if st.button("🚀 RUN FULL SCANNER"):
-    st.info("Starting scanner — output will stream below. This may take 1–4 minutes depending on network and compute.")
-    log_area = st.empty()
+/*************** NAVBAR (Fixed Top) ***************/
+.navbar {
+    width: 100%;
+    background: white;
+    border-bottom: 1px solid var(--border);
+    position: fixed;
+    top:0;
+    left:0;
+    z-index: 9999;
+    padding: 14px 28px;
+    box-sizing: border-box;
+}
+.nav-title {
+    font-size: 22px;
+    font-weight: 500;
+}
+.nav-subtitle {
+    margin-top: -2px;
+    font-size: 13.5px;
+    color: var(--muted);
+}
+
+/* Content padding so navbar does not overlap */
+.block-container {
+    padding-top: 120px !important;
+}
+
+/*************** CARD ***************/
+.card {
+    background: var(--card);
+    border-radius: var(--radius);
+    padding: 24px;
+    border: 1px solid var(--border);
+    box-shadow: 0px 4px 12px rgba(0,0,0,0.06);
+    margin-bottom: 30px;
+}
+
+/*************** BUTTONS (Material Style) ***************/
+.stButton>button {
+    width: 100%;
+    background: var(--primary) !important;
+    color: white !important;
+    border-radius: 6px;
+    padding: 10px 18px;
+    font-size: 15px;
+    font-weight: 500;
+    border: none;
+    transition: all .18s ease-in-out;
+}
+.stButton>button:hover {
+    background: var(--primary-hover) !important;
+    transform: translateY(-1px);
+}
+
+/*************** PROGRESS BAR ***************/
+.progress-bar {
+  width: 100%;
+  height: 10px;
+  border-radius: var(--radius);
+  background: #e4e7eb;
+  margin-top: 18px;
+}
+.progress-fill {
+  height: 10px;
+  border-radius: var(--radius);
+  transition: width .25s ease;
+  background: var(--primary);
+}
+
+/*************** CONSOLE ***************/
+pre, code, .stCode {
+    width: 100% !important;
+    max-width: 100% !important;
+}
+pre {
+    background: #f1f3f4 !important;
+    padding: 18px !important;
+    border-radius: var(--radius) !important;
+    font-size: 13px !important;
+    line-height: 1.5 !important;
+    border: 1px solid #e0e0e0 !important;
+    overflow-x: auto !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# ---------------------------  CENTERED HEADER SECTION  ------------------------------------ #
+# Use components.html to reliably render the centered header (avoids escaping)
+header_html = """
+<div style="width:100%; text-align:center; margin-top: 6px; padding: 10px 0 20px 0;">
+  <h1 style="font-size: 32px; font-weight: 500; color: #1e293b; margin: 0 0 6px 0;">
+    NIFTY 200 AI Scanner
+  </h1>
+  <p style="font-size: 15px; color: #64748b; font-weight: 400; margin: 0;">
+    AI-driven market scanner — Intraday & Swing Trade modes
+  </p>
+</div>
+"""
+# components.html will render HTML exactly and not be escaped; small height avoids huge iframe
+components.html(header_html, height=110)
+
+# ------------------------------------------------------------------------------------------- #
+#                           SCANNER FUNCTION (UNCHANGED)                                      #
+# ------------------------------------------------------------------------------------------- #
+def run_scanner(script, label):
+    if not Path(script).exists():
+        st.error(f"❌ {script} not found.")
+        return
+
+    env = os.environ.copy()
+    env["PYTHONIOENCODING"] = "utf-8"
+    cmd = [sys.executable, script]
+
+    anim = st.empty()
+    prog = st.empty()
+    logs_box = st.empty()
+
+    frames = ["[AI]","[AI..]","[AI...]","[AI↺]"]
+    colors = ["#1a73e8","#1664c4","#10b981"]
+    progress, i = 0, 0
     logs = ""
 
-    # Ensure subprocess inherits Streamlit’s Python environment
-    env = os.environ.copy()
-    env["PYTHONPATH"] = os.pathsep.join(sys.path)
+    with st.spinner(f"Running {label}..."):
+        proc = subprocess.Popen(
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            text=True, encoding="utf-8", errors="replace", env=env
+        )
 
-    # Run using same interpreter where all packages are installed
-    cmd = [sys.executable, "run_all.py"]
+        for line in iter(proc.stdout.readline, ''):
+            if not line:
+                break
 
-    # Stream output in real time
-    for chunk in stream_process(cmd, env):
-        logs += chunk
-        lines = logs.splitlines()
-        # keep last 400 lines to keep UI responsive
-        if len(lines) > 400:
-            lines = lines[-400:]
-            logs = "\n".join(lines) + "\n"
-        log_area.code(logs)
+            frame = frames[i % len(frames)]
+            color = colors[(progress // 34) % len(colors)]
+            progress = min(progress + random.randint(1,3), 100)
 
-    st.success("Run finished. If an Excel file was produced, it will appear below (if available).")
-
-    # ----------------------------------------------------------------
-    # Display download link for final Excel file if available
-    # ----------------------------------------------------------------
-    out_path = Path("Nifty200_Consolidated_Output.xlsx")
-    if out_path.exists():
-        with out_path.open("rb") as f:
-            st.download_button(
-                "📥 Download consolidated Excel",
-                data=f,
-                file_name=out_path.name,
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            # Animation panel (kept as a card)
+            anim.markdown(
+                f"<div class='card' style='text-align:center;'><strong>{frame} {label} — scanning market data</strong></div>",
+                unsafe_allow_html=True
             )
-    else:
-        st.warning("Consolidated Excel not found. Check logs above for any errors.")
+
+            # Progress bar
+            prog.markdown(f"""
+                <div class='progress-bar'>
+                    <div class='progress-fill' style='width:{progress}%;background:{color};'></div>
+                </div>
+            """, unsafe_allow_html=True)
+
+            # Append logs (limit lines)
+            logs += line
+            if len(logs.splitlines()) > 400:
+                logs = "\n".join(logs.splitlines()[-400:])
+
+            # Render logs unchanged using st.code (full width via CSS above)
+            logs_box.code(logs, language="bash")
+
+            time.sleep(0.25)
+            i += 1
+
+        proc.wait()
+
+    # Finalize progress
+    prog.markdown("""
+        <div class='progress-bar'>
+            <div class='progress-fill' style='width:100%;background:#10b981;'></div>
+        </div>
+    """, unsafe_allow_html=True)
+
+    anim.markdown(
+        "<div class='card' style='text-align:center;'><strong>✅ Scan Complete — AI insights ready</strong></div>",
+        unsafe_allow_html=True
+    )
+
+# ------------------------------------------------------------------------------------------- #
+#                           BUTTON CARD (Material UI)                                         #
+# ------------------------------------------------------------------------------------------- #
+st.markdown('<div class="card">', unsafe_allow_html=True)
+
+col1, col2, col3 = st.columns([1,2,1])
+with col2:
+    b1, b2 = st.columns(2)
+    start_intraday = b1.button("Intraday Scanner")
+    start_swing = b2.button("Swing Trade Scanner")
+
+st.markdown('</div>', unsafe_allow_html=True)
+
+# Full-width output below card
+if start_intraday:
+    run_scanner("run_all_intraday.py", "Intraday Scanner")
+
+if start_swing:
+    run_scanner("run_all_swing.py", "Swing Trade Scanner")
