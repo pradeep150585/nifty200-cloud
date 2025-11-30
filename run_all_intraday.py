@@ -211,11 +211,11 @@ def consolidate_outputs():
 if __name__ == "__main__":
     print("🚀 Starting Auto Scanner Pipeline...\n")
 
-    #run_script("30M.py")
-    #run_script("15M.py")
-    #run_script("5M.py")
-    #run_script("2M.py")
-    #run_script("1M.py")
+    run_script("30M.py")
+    run_script("15M.py")
+    run_script("5M.py")
+    run_script("2M.py")
+    run_script("1M.py")
 
     consolidate_outputs()
 
