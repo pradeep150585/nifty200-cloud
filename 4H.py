@@ -340,21 +340,21 @@ def compute_indicators_vectorized(df: pd.DataFrame, mom_period=MOM_PERIOD) -> pd
         o = row["Oscillator_Buy%"]
         m = row["MA_Buy%"]
 
-        # 60/40 weighted model with gentle bullish bias on MAs
-        combined = 0.6 * m + 0.4 * o
+        # Investing.com tends to weight MAs heavier (~70%) and trigger Strong Buy earlier
+        combined = 0.7 * m + 0.3 * o
 
-        # if both groups are bullish, boost combined score slightly
-        if m > 0.6 and o > 0.5:
-            combined += 0.1  # bias that converts borderline Buy → Strong Buy
+        # stronger boost when both bullish
+        if m > 0.55 and o > 0.45:
+            combined += 0.1
 
-        # relaxed Investing.com-style thresholds
-        if combined >= 0.65:
+        # slightly looser thresholds
+        if combined >= 0.55:
             return "Strong Buy"
-        elif combined >= 0.20:
+        elif combined >= 0.15:
             return "Buy"
-        elif combined <= -0.65:
+        elif combined <= -0.55:
             return "Strong Sell"
-        elif combined <= -0.20:
+        elif combined <= -0.15:
             return "Sell"
         else:
             return "Neutral"
