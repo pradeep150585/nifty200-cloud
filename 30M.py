@@ -378,7 +378,23 @@ def process_symbol_from_df(symbol: str, df_tk: pd.DataFrame):
         cmp_price = float(last["Close"])
         prev_close = float(df_ind["Close"].iloc[-2]) if len(df_ind) >= 2 else np.nan
         change_pct = round((cmp_price - prev_close) / prev_close * 100, 2) if (prev_close and not math.isnan(prev_close) and prev_close != 0) else None
-        return {"Symbol": symbol.replace(".NS", ""), "CMP": round(cmp_price,2), "Change%": change_pct, "Net_Score": net_score, "Weighted_Net_Score": weighted_score, "Summary": summary}
+        try:
+            avg_vol20 = df_ind["Volume"].tail(20).mean()
+            last_vol = df_ind["Volume"].iloc[-1]
+            vol_ratio = round(last_vol / avg_vol20, 2) if avg_vol20 and avg_vol20 > 0 else np.nan
+            vol_ratio_str = f"{vol_ratio}x" if not np.isnan(vol_ratio) else "N/A"
+        except Exception:
+            vol_ratio_str = "N/A"
+
+        return {
+            "Symbol": symbol.replace(".NS", ""),
+            "CMP": round(cmp_price, 2),
+            "Change%": change_pct,
+            "Net_Score": net_score,
+            "Weighted_Net_Score": weighted_score,
+            "Summary": summary,
+            "VolumeRatio": vol_ratio_str  # ✅ New Column
+        }
     except Exception:
         return None
 
@@ -439,16 +455,74 @@ def run_scanner(output_filename=OUTPUT_FILENAME, batch_size=BATCH_SIZE, verbose=
         print("No results collected.")
         return None
 
-    final_df = pd.DataFrame(results, columns=["Symbol", "CMP", "Change%", "Net_Score", "Weighted_Net_Score", "Summary"])
+    final_df = pd.DataFrame(results, columns=["Symbol", "CMP", "Change%", "Net_Score", "Weighted_Net_Score", "Summary", "VolumeRatio"])
     final_df = final_df.sort_values(by="Weighted_Net_Score", ascending=False)
     final_df.to_excel(output_filename, index=False)
     print(f"\nSaved: {output_filename}  ({datetime.now().strftime('%Y-%m-%d %H:%M:%S')})")
     return final_df
 
 # -----------------------
+# NIFTY TREND ANALYSIS
+# -----------------------
+def get_nifty_trend_summary():
+    """Detect NIFTY 30-min trend using the same indicator logic as for stocks."""
+    import pandas as pd
+    import yfinance as yf
+
+    print("\n📊 Fetching NIFTY 30-min data for trend detection...")
+    df = yf.download("^NSEI", period="60d", interval="30m", progress=False, auto_adjust=False)
+
+    # --- Normalize and validate columns ---
+    if isinstance(df.columns, pd.MultiIndex):
+        df.columns = [col[0] if isinstance(col, tuple) else col for col in df.columns]
+    df.columns = [str(c).strip().capitalize() for c in df.columns]
+
+    required = {"Close", "High", "Low"}
+    if not required.issubset(df.columns):
+        print(f"⚠️ Missing required columns in Nifty data. Found: {list(df.columns)}")
+        return "Neutral"
+
+    # --- Run same indicator pipeline as stocks ---
+    try:
+        df = compute_indicators_vectorized(df)
+    except Exception as e:
+        print(f"⚠️ Indicator computation failed: {e}")
+        return "Neutral"
+
+    if "Summary" not in df.columns or df.empty:
+        print("⚠️ Indicator results missing 'Summary' column.")
+        return "Neutral"
+
+    # --- Get last candle summary ---
+    last = df.iloc[-1]
+    summary = str(last["Summary"])
+
+    # --- Derive trend from Summary like Investing.com style ---
+    if "Strong Buy" in summary:
+        trend = "Bullish"
+    elif "Strong Sell" in summary:
+        trend = "Bearish"
+    elif "Buy" in summary:
+        trend = "Mild Bullish"
+    elif "Sell" in summary:
+        trend = "Mild Bearish"
+    else:
+        trend = "Neutral"
+
+    print(f"\n📈 NIFTY SUMMARY: {summary}")
+    print(f"📊 NIFTY TREND (based on full indicator model): {trend}")
+
+    return trend
+
+# -----------------------
 # MAIN
 # -----------------------
 if __name__ == "__main__":
+    nifty_trend = get_nifty_trend_summary()  # ✅ Nifty trend check first
+    with open("Nifty_Trend.txt", "w") as f:
+        f.write(str(nifty_trend))
+    print(f"\n💾 Saved Nifty Trend: {nifty_trend}")
+
     df_final = run_scanner()
     if df_final is not None:
         print("\nTop 30 by Weighted_Net_Score:")

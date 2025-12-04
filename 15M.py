@@ -36,7 +36,7 @@ from tqdm import tqdm
 # -----------------------
 NIFTY200_URL = "https://archives.nseindia.com/content/indices/ind_nifty200list.csv"
 YFINANCE_PERIOD = "14d"
-YFINANCE_INTERVAL = "5m"
+YFINANCE_INTERVAL = "15m"
 OUTPUT_FILENAME = "Nifty200_Weighted_Balanced_15M_fixed.xlsx"
 BATCH_SIZE = 20
 MOM_PERIOD = 10
