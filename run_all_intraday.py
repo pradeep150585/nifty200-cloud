@@ -2,8 +2,12 @@ import subprocess
 import os
 import pandas as pd
 import sys
+import time
 from tqdm import tqdm
 
+# ---------------------------------------
+# File Paths
+# ---------------------------------------
 FILE_1M  = "Nifty200_Weighted_Balanced_1M_fixed.xlsx"
 FILE_2M  = "Nifty200_Weighted_Balanced_2M_fixed.xlsx"
 FILE_5M  = "Nifty200_Weighted_Balanced_5M_fixed.xlsx"
@@ -11,33 +15,45 @@ FILE_15M = "Nifty200_Weighted_Balanced_15M_fixed.xlsx"
 FILE_30M = "Nifty200_Weighted_Balanced_30M_fixed.xlsx"
 CONSOLIDATED_OUTPUT = "Nifty200_Consolidated_Output.xlsx"
 
+
+# ---------------------------------------
+# Helper: Run Sub-Scripts Silently
+# ---------------------------------------
 def run_script(script_name):
-    print(f"\n🔥 Running: {script_name} ...\n")
     process = subprocess.Popen(
         [sys.executable, "-X", "utf8", script_name],
-        stdout=subprocess.PIPE,
+        stdout=subprocess.DEVNULL,   # Silent output
         stderr=subprocess.PIPE,
         text=True,
         encoding="utf-8"
     )
-    out, err = process.communicate()
+    _, err = process.communicate()
     if process.returncode != 0:
-        print(f"❌ Error in {script_name}:\n{err}\n")
-    else:
-        print(out)
-        print(f"✅ {script_name} completed successfully.\n")
+        print(f"❌ Error in {script_name}: {err}")
 
+
+# ---------------------------------------
+# Helper: Load Excel Safely
+# ---------------------------------------
 def safe_load(path):
     if not os.path.exists(path):
         print(f"⚠ Missing file: {path}")
         return pd.DataFrame()
     return pd.read_excel(path)
 
+
+# ---------------------------------------
+# Consolidate All Outputs + Filter Final
+# ---------------------------------------
 def consolidate_outputs(nifty_trend):
-    print("\n📊 Consolidating timeframe outputs...")
+    print("\n📊 Consolidating all timeframe outputs...")
 
     files = [FILE_1M, FILE_2M, FILE_5M, FILE_15M, FILE_30M]
     dfs = [safe_load(f) for f in files]
+    if any(df.empty for df in dfs):
+        print("⚠ Some timeframe data missing. Skipping consolidation.")
+        return
+
     df1, df2, df5, df15, df30 = dfs
 
     for df in dfs:
@@ -60,6 +76,7 @@ def consolidate_outputs(nifty_trend):
              .merge(df15, on="Symbol", how="left")
     )
 
+    # Keep only Strong Buy/Sell combinations
     def strong_condition(x):
         summaries = x[["Summary_1M", "Summary_2M", "Summary_5M", "Summary_15M", "Summary_30M"]]
         if summaries.isna().any():
@@ -71,11 +88,22 @@ def consolidate_outputs(nifty_trend):
         return False
 
     mask = final.apply(strong_condition, axis=1)
-    filtered = final.loc[mask, ["Symbol", "CMP_5M", "ChangePct", "Summary_1M", "Summary_30M", "Volume"]].rename(
-        columns={"CMP_5M": "CMP", "ChangePct": "Change%", "Summary_1M": "Summary_Medium", "Summary_30M": "Summary_Long"}
+    filtered = final.loc[mask, ["Symbol", "CMP_5M", "Summary_1M", "Summary_30M", "Volume"]].rename(
+        columns={"CMP_5M": "CMP", "Summary_1M": "Summary_Medium", "Summary_30M": "Summary_Long"}
     )
 
-    # Convert volume to numeric multiplier (e.g., "1.5x" -> 1.5) for sorting
+    # Merge Medium + Long Summary into single "Trend" column
+    def combine_trend(row):
+        if "Strong Buy" in row["Summary_Medium"] and "Strong Buy" in row["Summary_Long"]:
+            return "Strong Buy"
+        elif "Strong Sell" in row["Summary_Medium"] and "Strong Sell" in row["Summary_Long"]:
+            return "Strong Sell"
+        else:
+            return "Neutral"
+
+    filtered["Trend"] = filtered.apply(combine_trend, axis=1)
+
+    # Sort by Volume descending
     def parse_volume(v):
         try:
             return float(str(v).replace("x", ""))
@@ -85,33 +113,39 @@ def consolidate_outputs(nifty_trend):
     filtered["VolumeValue"] = filtered["Volume"].apply(parse_volume)
     filtered = filtered.sort_values(by="VolumeValue", ascending=False).drop(columns=["VolumeValue"])
 
+    # --- Final Display ---
     if not filtered.empty:
-        print("\n" + "="*85)
+        print("\n" + "="*80)
         print(f"📈 FINAL STRONG SIGNALS — NIFTY TREND: {nifty_trend.upper()}")
-        print("="*85)
-        print(filtered.to_string(index=False))
+        print("="*80)
+        print(filtered[["Symbol", "CMP", "Trend", "Volume"]].to_string(index=False))
+        filtered.to_excel(CONSOLIDATED_OUTPUT, index=False)
     else:
         print(f"\n⚠️ No Strong Buy/Sell signals. NIFTY TREND: {nifty_trend}\n")
 
+
+# ---------------------------------------
+# Main Runner
+# ---------------------------------------
 if __name__ == "__main__":
-    print("🚀 Starting Auto Scanner Pipeline...\n")
+    print("Starting Auto Scanner Pipeline...\n")
 
-    # --- Run scripts in order (30M first to get Nifty Trend) ---
-    run_script("30M.py")
+    scripts = ["30M.py", "15M.py", "5M.py", "2M.py", "1M.py"]
+    progress_steps = [20, 40, 60, 80, 100]
 
-    # Extract Nifty Trend from 30M.py log file (if printed)
+    print("AI is scanning and processing indicators...\n")
+    for script, percent in zip(scripts, progress_steps):
+        run_script(script)
+        time.sleep(1)  # small delay to visualize progress
+        tqdm.write(f"Progress: {percent}% completed")
+
+    # Read Nifty Trend saved by 30M.py
     nifty_trend = "Neutral"
     try:
-        # Search last run’s trend in a text file if saved, else default
         if os.path.exists("Nifty_Trend.txt"):
-            nifty_trend = open("Nifty_Trend.txt").read().strip()
+            nifty_trend = open("Nifty_Trend.txt").read().strip() or "Neutral"
     except Exception:
         nifty_trend = "Neutral"
-
-    run_script("15M.py")
-    run_script("5M.py")
-    run_script("2M.py")
-    run_script("1M.py")
 
     consolidate_outputs(nifty_trend)
     print("\n🌟 All tasks completed successfully!\n")
