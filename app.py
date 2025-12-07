@@ -9,7 +9,7 @@ from run_all_swing import main as run_swing_main
 
 
 # ---------- Page Setup ----------
-st.set_page_config(page_title="MarketMind AI", layout="wide")
+st.set_page_config(page_title="ScanBot AI", layout="wide")
 
 # ---------- CSS ----------
 st.markdown("""
@@ -159,7 +159,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ---------- Header ----------
-st.markdown("<div class='main-heading'>MarketMind AI</div>", unsafe_allow_html=True)
+st.markdown("<div class='main-heading'>ScanBot AI</div>", unsafe_allow_html=True)
 st.markdown("<div class='sub-heading'>Nifty 200 AI-powered Analysis Dashboard</div>", unsafe_allow_html=True)
 
 
