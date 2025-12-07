@@ -9,7 +9,7 @@ from run_all_swing import main as run_swing_main
 
 
 # ---------- Page Setup ----------
-st.set_page_config(page_title="ScanBot AI", layout="wide")
+st.set_page_config(page_title="ScanBot AI", layout="wide", menu_items=None)
 
 # ---------- CSS ----------
 st.markdown("""
