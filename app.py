@@ -180,7 +180,7 @@ def run_script_with_progress(script, excel_out):
         progress_text = st.empty()
         st.markdown("</div>", unsafe_allow_html=True)
 
-    total_runtime = 270
+    total_runtime = 600
     value = 0.0
     step = 1 / total_runtime
 
