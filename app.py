@@ -10,6 +10,25 @@ from run_all_swing import main as run_swing_main
 
 # ---------- Page Setup ----------
 st.set_page_config(page_title="ScanBot AI", layout="wide")
+# ---------- Persistent Footer (always visible) ----------
+st.markdown("""
+    <style>
+    .footer {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background-color: #222;
+        color: gray;
+        text-align: center;
+        padding: 10px 0;
+        font-size: 0.9em;
+        border-top: 1px solid #444;
+        z-index: 99999;
+    }
+    </style>
+    <div class="footer">Developed by <b>Pradeep Kumar Palani</b></div>
+""", unsafe_allow_html=True)
 hide_menu_style = """
     <style>
     #MainMenu {visibility: hidden;}  /* Hides the top-right menu */
@@ -23,7 +42,7 @@ st.markdown("""
 <style>
     /* Top spacing */
     .block-container {
-        padding-top: 80px !important;
+        padding-top: 10px !important;
     }
 
     /* Import Darkly CSS */
@@ -205,10 +224,25 @@ def run_script_with_progress(script, excel_out):
         if os.path.exists(excel_out):
             try:
                 df = pd.read_excel(excel_out)
+
                 if not df.empty:
-                    for col in ["Summary_Medium", "Summary_Long"]:
-                        if col in df.columns:
-                            df.drop(columns=[col], inplace=True)
+                    # ✅ Clean column names to remove hidden spaces or case mismatches
+                    df.columns = df.columns.str.strip().str.replace(r'\s+', '_', regex=True)
+
+                    # ✅ First calculate Trend using Summary_Medium and Summary_Long
+                    if all(c in df.columns for c in ["Summary_Medium", "Summary_Long"]):
+                        df["Trend"] = df.apply(
+                            lambda x: (
+                                "Strong Buy" if x["Summary_Medium"] == "Strong Buy" and x["Summary_Long"] == "Strong Buy"
+                                else "Strong Sell" if x["Summary_Medium"] == "Strong Sell" and x["Summary_Long"] == "Strong Sell"
+                                else "Neutral"
+                            ),
+                            axis=1
+                        )
+
+                    # Remove Summary_Medium and Summary_Long from final table
+                    columns_to_remove = ["Summary_Medium", "Summary_Long"]
+                    df.drop(columns=[c for c in columns_to_remove if c in df.columns], inplace=True)
 
                     if "CMP" in df.columns:
                         df["CMP"] = df["CMP"].astype(float).round(2)
@@ -216,10 +250,10 @@ def run_script_with_progress(script, excel_out):
                     def style_row(r):
                         if isinstance(r.get("Trend"), str):
                             if "Strong Buy" in r["Trend"]:
-                                return ['background-color:#eafaf6;color:#1abc9c;font-weight:400;']*len(r)
+                                return ['background-color:#eafaf6;color:#1abc9c;font-weight:400;'] * len(r)
                             elif "Strong Sell" in r["Trend"]:
-                                return ['background-color:#fdecea;color:#e74c3c;font-weight:400;']*len(r)
-                        return ['']*len(r)
+                                return ['background-color:#fdecea;color:#e74c3c;font-weight:400;'] * len(r)
+                        return [''] * len(r)
 
                     try:
                         with open("Nifty_Trend.txt", "r") as f:
@@ -227,19 +261,23 @@ def run_script_with_progress(script, excel_out):
                         st.markdown(f"<div style='text-align:left; font-size:1.2rem; margin:10px 0;'><b>Nifty Trend:</b> {nifty_value}</div>", unsafe_allow_html=True)
                     except:
                         st.markdown("<div style='text-align:left; font-size:1.2rem; margin:10px 0; color:#bbb;'><b>Nifty Trend:</b> Not Available</div>", unsafe_allow_html=True)
- 
+
                     styled = df.style.apply(style_row, axis=1).format({"CMP": "{:.2f}"})
 
                     if hasattr(styled, "hide_index"):
                         styled = styled.hide_index()
                     else:
                         styled = styled.hide(axis="index")
+
                     styled_html = styled.to_html(classes="table table-hover table-dark no-border-table")
                     st.markdown(f"<div class='table-container'>{styled_html}</div>", unsafe_allow_html=True)
+
                 else:
                     st.warning("No strong signals found.")
+
             except Exception as e:
                 st.error(f"Error reading output file: {e}")
+
         else:
             st.error("Output file not found.")
 
@@ -254,11 +292,3 @@ if run_intraday:
     run_script_with_progress("run_all_intraday.py", "Nifty200_Consolidated_Output.xlsx")
 elif run_swing:
     run_script_with_progress("run_all_swing.py", "Nifty200_Consolidated_Output.xlsx")
-
-# ---------- Footer ----------
-st.markdown("""
-<hr>
-<div style="text-align:center;color:gray;font-size:0.9em;">
-Developed by <b>Pradeep Kumar Palani</b>
-</div>
-""", unsafe_allow_html=True)
