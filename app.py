@@ -206,6 +206,10 @@ def run_script_with_progress(script, excel_out):
             try:
                 df = pd.read_excel(excel_out)
                 if not df.empty:
+                    for col in ["Summary_Medium", "Summary_Long"]:
+                        if col in df.columns:
+                            df.drop(columns=[col], inplace=True)
+
                     if "CMP" in df.columns:
                         df["CMP"] = df["CMP"].astype(float).round(2)
 
