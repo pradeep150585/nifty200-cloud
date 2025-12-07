@@ -9,7 +9,7 @@ from run_all_swing import main as run_swing_main
 
 
 # ---------- Page Setup ----------
-st.set_page_config(page_title="Nifty 200 AI Scanner", layout="wide")
+st.set_page_config(page_title="MarketMind AI", layout="wide")
 
 # ---------- CSS ----------
 st.markdown("""
@@ -159,41 +159,39 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ---------- Header ----------
-st.markdown("<div class='main-heading'>Nifty 200 AI Scanner</div>", unsafe_allow_html=True)
-st.markdown("<div class='sub-heading'>AI-powered Analysis Dashboard</div>", unsafe_allow_html=True)
+st.markdown("<div class='main-heading'>MarketMind AI</div>", unsafe_allow_html=True)
+st.markdown("<div class='sub-heading'>Nifty 200 AI-powered Analysis Dashboard</div>", unsafe_allow_html=True)
 
 
 # ---------- Script Runner ----------
 def run_script_with_progress(script, excel_out):
     progress_area = st.container()
     with progress_area:
-        st.markdown("<div class='progress-wrapper'>", unsafe_allow_html=True)
-        progress_bar = st.progress(0.0)
+        progress_bar = st.progress(0)
         progress_text = st.empty()
-        st.markdown("</div>", unsafe_allow_html=True)
+
+    progress_value = 0
+
+    # Callback used by scanner scripts
+    def progress_callback(percent):
+        nonlocal progress_value
+        progress_value = percent
+        progress_bar.progress(percent)
+        progress_text.markdown(f"<div style='text-align:center;'>Running... {percent}%</div>", unsafe_allow_html=True)
 
     try:
-        # Show progress while running inside same process
-        for i in range(5):
-            progress_bar.progress((i+1)*15)
-            progress_text.markdown(f"<div class='progress-text'>Running... ({(i+1)*15}%)</div>",
-                               unsafe_allow_html=True)
-            time.sleep(0.5)
-
-        # Run scanner directly inside Streamlit (no subprocess)
         if script == "run_all_intraday.py":
-            run_intraday_main()
+            run_intraday_main(progress_callback)
         else:
-            run_swing_main()
+            run_swing_main(progress_callback)
 
         progress_bar.progress(100)
-        progress_text.markdown("<div class='progress-text'>Completed. Loading results…</div>",
-                           unsafe_allow_html=True)
+        progress_text.markdown("<div style='text-align:center;'>Completed. Loading results…</div>", unsafe_allow_html=True)
         time.sleep(1)
 
     except Exception as e:
-        progress_text.markdown(f"<div class='progress-text' style='color:red;'>Error: {e}</div>",
-                           unsafe_allow_html=True)
+        progress_text.markdown(f"<div style='text-align:center;color:red;'>Error: {e}</div>", unsafe_allow_html=True)
+        return
 
     output_area = st.container()
     with output_area:
@@ -201,14 +199,9 @@ def run_script_with_progress(script, excel_out):
             try:
                 df = pd.read_excel(excel_out)
                 if not df.empty:
-                    df = df.drop(columns=[c for c in ["Summary_Medium", "Summary_Long"] if c in df.columns])
-
-                    # -------- CMP ROUNDING ----------
                     if "CMP" in df.columns:
-                        # numeric rounding (actual stored values)
                         df["CMP"] = df["CMP"].astype(float).round(2)
 
-                    # Row Coloring (keeps inline styles for strong signals)
                     def style_row(r):
                         if isinstance(r.get("Trend"), str):
                             if "Strong Buy" in r["Trend"]:
@@ -217,18 +210,20 @@ def run_script_with_progress(script, excel_out):
                                 return ['background-color:#fdecea;color:#e74c3c;font-weight:400;']*len(r)
                         return ['']*len(r)
 
-                    # Nifty Trend
                     try:
                         with open("Nifty_Trend.txt", "r") as f:
                             nifty_value = f.read().strip()
                         st.markdown(f"<div style='text-align:left; font-size:1.2rem; margin:10px 0;'><b>Nifty Trend:</b> {nifty_value}</div>", unsafe_allow_html=True)
                     except:
                         st.markdown("<div style='text-align:left; font-size:1.2rem; margin:10px 0; color:#bbb;'><b>Nifty Trend:</b> Not Available</div>", unsafe_allow_html=True)
-
-                    # Apply style + format CMP to exactly 2 decimals for display
+ 
                     styled = df.style.apply(style_row, axis=1).format({"CMP": "{:.2f}"})
-                    styled_html = styled.hide(axis="index").to_html(classes="table table-hover table-dark no-border-table")
 
+                    if hasattr(styled, "hide_index"):
+                        styled = styled.hide_index()
+                    else:
+                        styled = styled.hide(axis="index")
+                    styled_html = styled.to_html(classes="table table-hover table-dark no-border-table")
                     st.markdown(f"<div class='table-container'>{styled_html}</div>", unsafe_allow_html=True)
                 else:
                     st.warning("No strong signals found.")
@@ -236,7 +231,6 @@ def run_script_with_progress(script, excel_out):
                 st.error(f"Error reading output file: {e}")
         else:
             st.error("Output file not found.")
-
 
 # ---------- Buttons ----------
 st.markdown("<div class='button-container'>", unsafe_allow_html=True)
@@ -249,7 +243,6 @@ if run_intraday:
     run_script_with_progress("run_all_intraday.py", "Nifty200_Consolidated_Output.xlsx")
 elif run_swing:
     run_script_with_progress("run_all_swing.py", "Nifty200_Consolidated_Output.xlsx")
-
 
 # ---------- Footer ----------
 st.markdown("""

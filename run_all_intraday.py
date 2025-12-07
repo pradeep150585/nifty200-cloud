@@ -134,25 +134,60 @@ def consolidate_outputs(nifty_trend):
 # ---------------------------------------
 # Main Runner
 # ---------------------------------------
-def main():
-    print("Starting Auto Scanner Pipeline...\n")
-    nifty_trend, df_final = run_scanner_with_trend(period="60d", interval="30m", output_filename="Nifty200_Weighted_Balanced_30M_fixed.xlsx")
-    run_scanner(period="14d", interval="15m", output_filename="Nifty200_Weighted_Balanced_15M_fixed.xlsx")
-    run_scanner(period="14d", interval="5m", output_filename="Nifty200_Weighted_Balanced_5M_fixed.xlsx")
-    run_scanner(period="2d", interval="2m", output_filename="Nifty200_Weighted_Balanced_2M_fixed.xlsx")
-    run_scanner(period="2d", interval="1m", output_filename="Nifty200_Weighted_Balanced_1M_fixed.xlsx")
+def main(progress_callback=None):
+    total_steps = 8
+    current = 0
 
-    # Read Nifty Trend saved by earlier script
-    nifty_trend = "Neutral"
+    def update():
+        if progress_callback:
+            progress_callback(int((current / total_steps) * 100))
+
+    print("Starting Auto Scanner Pipeline...\n")
+
+    current += 1; update()
+
+    # ---- STEP 1 ----
+    nifty_trend, df_final = run_scanner_with_trend(period="60d", interval="30m",
+                                                   output_filename="Nifty200_Weighted_Balanced_30M_fixed.xlsx")
+    current += 1; update()
+
+    # ---- STEP 2 ----
+    run_scanner(period="14d", interval="15m",
+                output_filename="Nifty200_Weighted_Balanced_15M_fixed.xlsx")
+    current += 1; update()
+
+    # ---- STEP 3 ----
+    run_scanner(period="14d", interval="5m",
+                output_filename="Nifty200_Weighted_Balanced_5M_fixed.xlsx")
+    current += 1; update()
+
+    # ---- STEP 4 ----
+    run_scanner(period="2d", interval="2m",
+                output_filename="Nifty200_Weighted_Balanced_2M_fixed.xlsx")
+    current += 1; update()
+
+    # ---- STEP 5 ----
+    run_scanner(period="2d", interval="1m",
+                output_filename="Nifty200_Weighted_Balanced_1M_fixed.xlsx")
+    current += 1; update()
+
+    # ---- STEP 6 ---- (trend reload)
     try:
         if os.path.exists("Nifty_Trend.txt"):
             nifty_trend = open("Nifty_Trend.txt").read().strip() or "Neutral"
-    except Exception:
+    except:
         nifty_trend = "Neutral"
 
-    consolidate_outputs(nifty_trend)
-    print("\n🌟 All tasks completed successfully!\n")
+    current += 1; update()
 
+    # ---- STEP 7 ---- Final consolidation ----
+    consolidate_outputs(nifty_trend)
+    current += 1; update()
+
+    if progress_callback:
+        progress_callback(100)
+
+    print("\n🌟 All tasks completed successfully!\n")
 
 if __name__ == "__main__":
     main()
