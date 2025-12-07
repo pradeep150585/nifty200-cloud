@@ -2,222 +2,153 @@ import subprocess
 import os
 import pandas as pd
 import sys
+import time
 from tqdm import tqdm
-from time import sleep
+from common_functions import run_scanner, run_scanner_with_trend, process_symbol_from_df_with_volume
+import sys
 
-# -----------------------------
-# CONFIG: Output filenames
-# -----------------------------
+# Disable tqdm progress bars if launched from Streamlit
+if "--no-tqdm" in sys.argv or "--safe" in sys.argv:
+    from tqdm import tqdm
+    tqdm.__init__ = lambda *args, **kwargs: iter([])
+
+# ---------------------------------------
+# File Paths
+# ---------------------------------------
 FILE_30M  = "Nifty200_Weighted_Balanced_30M_fixed.xlsx"
 FILE_1H  = "Nifty200_Weighted_Balanced_1H_fixed.xlsx"
 FILE_4H  = "Nifty200_Weighted_Balanced_4H_fixed.xlsx"
 FILE_1D = "Nifty200_Weighted_Balanced_1D_fixed.xlsx"
 FILE_1W = "Nifty200_Weighted_Balanced_1W_fixed.xlsx"
-
 CONSOLIDATED_OUTPUT = "Nifty200_Consolidated_Output.xlsx"
 
-# -----------------------------
-# RUN A SCRIPT WITH PROGRESS BAR
-# -----------------------------
+
+# ---------------------------------------
+# Helper: Run Sub-Scripts Silently
+# ---------------------------------------
 def run_script(script_name):
-    import subprocess
-
-    print(f"\n🔥 Running: {script_name} ...\n")
-
     process = subprocess.Popen(
         [sys.executable, "-X", "utf8", script_name],
-        stdout=subprocess.DEVNULL,       # Don't read stdout (avoids blocking)
-        stderr=subprocess.PIPE           # Capture raw bytes
+        stdout=subprocess.DEVNULL,   # Silent output
+        stderr=subprocess.PIPE,
+        text=True,
+        encoding="utf-8"
     )
-
-    # Read stderr safely without UnicodeDecodeError
-    stderr_bytes = process.stderr.read()
-    stderr = stderr_bytes.decode("utf-8", errors="ignore")
-
-    process.wait()
-
+    _, err = process.communicate()
     if process.returncode != 0:
-        print(f"❌ Error in {script_name}:\n{stderr}\n")
-    else:
-        print(f"✅ {script_name} completed successfully.\n")
+        print(f"❌ Error in {script_name}: {err}")
 
-# -----------------------------
-# SAFE LOAD EXCEL
-# -----------------------------
+
+# ---------------------------------------
+# Helper: Load Excel Safely
+# ---------------------------------------
 def safe_load(path):
     if not os.path.exists(path):
         print(f"⚠ Missing file: {path}")
         return pd.DataFrame()
     return pd.read_excel(path)
 
-# -----------------------------
-# MAIN MERGE FUNCTION
-# -----------------------------
-def consolidate_outputs():
 
-    print("\n📊 Consolidating timeframe outputs...")
+# ---------------------------------------
+# Consolidate All Outputs + Filter Final
+# ---------------------------------------
+def consolidate_outputs(nifty_trend):
+    print("\n📊 Consolidating all timeframe outputs...")
 
-    # Progress bar for loading files  
     files = [FILE_30M, FILE_1H, FILE_4H, FILE_1D, FILE_1W]
-    dfs = []
-
-    for f in tqdm(files, desc="Loading Excel files", ncols=90):
-        dfs.append(safe_load(f))
+    dfs = [safe_load(f) for f in files]
+    if any(df.empty for df in dfs):
+        print("⚠ Some timeframe data missing. Skipping consolidation.")
+        return
 
     df1, df2, df3, df4, df5 = dfs
 
-    # -----------------------------------------------------------
-    # NORMALIZE ALL COLUMN NAMES (fix space, NBSP, hidden chars)
-    # -----------------------------------------------------------
     for df in dfs:
-        df.columns = (
-            df.columns
-            .astype(str)
-            .str.strip()
-            .str.replace("\u00A0", "", regex=False)
-        )
-
-        # Normalize symbols
+        df.columns = df.columns.astype(str).str.strip().str.replace("\u00A0", "", regex=False)
         if "Symbol" in df.columns:
             df["Symbol"] = df["Symbol"].astype(str).str.upper()
 
-    # -----------------------------------------------------------
-    # 30M FRAME
-    # -----------------------------------------------------------
-    df1 = df1.rename(columns={
-        "CMP": "CMP_30M",
-        "Weighted_Net_Score": "NetScore_30M",
-        "Summary": "Summary_30M"
-    })
-
-    df1 = df1[["Symbol", "CMP_30M", "NetScore_30M", "Summary_30M"]]
-
-    # -----------------------------------------------------------
-    # 1H FRAME
-    # -----------------------------------------------------------
-    df2 = df2.rename(columns={
-        "CMP": "CMP_1H",
-        "Weighted_Net_Score": "NetScore_1H",
-        "Summary": "Summary_1H"
-    })
-
-    df2 = df2[["Symbol", "NetScore_1H", "Summary_1H"]]
-
-    # -----------------------------------------------------------
-    # 4H FRAME
-    # -----------------------------------------------------------
-    df3 = df3.rename(columns={
-        "CMP": "CMP_4H",
-        "Weighted_Net_Score": "NetScore_4H",
-        "Summary": "Summary_4H"
-    })
-
-    df3 = df3[["Symbol", "NetScore_4H", "Summary_4H"]]
-
-    # -----------------------------------------------------------
-    # 1D FRAME
-    # -----------------------------------------------------------
-    df4 = df4.rename(columns={
-        "CMP": "CMP_1D",
-        "Change%": "ChangePct",
-        "Weighted_Net_Score": "NetScore_1D",
-        "Summary": "Summary_1D"
-    })
-
-    df4 = df4[["Symbol", "ChangePct", "NetScore_1D", "Summary_1D"]]
-
-    # -----------------------------------------------------------
-    # 1W FRAME
-    # -----------------------------------------------------------
-    df5 = df5.rename(columns={
-        "CMP": "CMP_1W",
-        "Weighted_Net_Score": "NetScore_1W",
-        "Summary": "Summary_1W"
-    })
-
-    df5 = df5[["Symbol", "NetScore_1W", "Summary_1W"]]
-
-    # -----------------------------------------------------------
-    # MERGE ALL TIMEFRAMES
-    # -----------------------------------------------------------
-    print("\n🔄 Merging all timeframes...")
+    df1 = df1.rename(columns={"Summary": "Summary_30M"})[["Symbol", "Summary_30M"]]
+    df2 = df2.rename(columns={"Summary": "Summary_1H"})[["Symbol", "Summary_1H"]]
+    df3 = df3.rename(columns={"Summary": "Summary_4H", "CMP": "CMP_4H"})[["Symbol", "CMP_4H", "Summary_4H"]]
+    df4 = df4.rename(columns={"Summary": "Summary_1D"})[["Symbol", "Summary_1D"]]
+    df5 = df5.rename(columns={"Summary": "Summary_1W", "Change%": "ChangePct", "VolumeRatio": "Volume"})[
+        ["Symbol", "ChangePct", "Summary_1W", "Volume"]
+    ]
 
     final = (
-        df5.merge(df1,  on="Symbol", how="left")
-             .merge(df2,  on="Symbol", how="left")
+        df5.merge(df1, on="Symbol", how="left")
+             .merge(df2, on="Symbol", how="left")
              .merge(df3, on="Symbol", how="left")
              .merge(df4, on="Symbol", how="left")
     )
 
-    # -----------------------------------------------------------
-    # FINAL COLUMN ORDER
-    # -----------------------------------------------------------
-    final = final[
-        [
-            "Symbol",
-            "CMP_30M",
-            "ChangePct",
-            "NetScore_30M",  "Summary_30M",
-            "NetScore_1H",  "Summary_1H",
-            "NetScore_4H",  "Summary_4H",
-            "NetScore_1D", "Summary_1D",
-            "NetScore_1W", "Summary_1W",
-         ]
-    ]
-
-    # Save file
-    if os.path.exists(CONSOLIDATED_OUTPUT):
-        os.remove(CONSOLIDATED_OUTPUT)
-
-    final.to_excel(CONSOLIDATED_OUTPUT, index=False)
-
-    # -----------------------------------------------------------
-    # SHOW ONLY STRONG BUY / STRONG SELL IN ALL 5 TIMEFRAMES
-    # -----------------------------------------------------------
-    def buy_sell_condition(x):
-        # Buy condition
-        if all(v == "Strong Buy" for v in x[["Summary_30M", "Summary_1H", "Summary_4H"]]) and \
-           all(v in ["Strong Buy", "Buy"] for v in x[["Summary_1D", "Summary_1W"]]):
+    # Keep only Strong Buy/Sell combinations
+    def strong_condition(x):
+        summaries = x[["Summary_30M", "Summary_1H", "Summary_4H", "Summary_1D", "Summary_1W"]]
+        if summaries.isna().any():
+            return False
+        if all(v == "Strong Buy" for v in summaries):
             return True
-
-        # Sell condition
-        if all(v == "Strong Sell" for v in x[["Summary_30M", "Summary_1H", "Summary_4H"]]) and \
-           all(v in ["Strong Sell", "Sell"] for v in x[["Summary_1D", "Summary_1W"]]):
+        if all(v == "Strong Sell" for v in summaries):
             return True
-
         return False
 
-    mask = final.apply(buy_sell_condition, axis=1)
-
-    filtered = final.loc[mask, ["Symbol", "CMP_30M", "ChangePct", "Summary_30M", "Summary_1W"]].rename(
-        columns={
-            "CMP_30M": "CMP",
-            "ChangePct": "Change%_1D",
-            "Summary_30M": "Summary_Medium",
-            "Summary_1W": "Summary_Long"
-        }
+    mask = final.apply(strong_condition, axis=1)
+    filtered = final.loc[mask, ["Symbol", "CMP_4H", "Summary_30M", "Summary_1W", "Volume"]].rename(
+        columns={"CMP_4H": "CMP", "Summary_30M": "Summary_Medium", "Summary_1W": "Summary_Long"}
     )
 
-    print(f"\n🎉 Final consolidated file created → {CONSOLIDATED_OUTPUT}\n")
+    # Merge Medium + Long Summary into single "Trend" column
+    def combine_trend(row):
+        if "Strong Buy" in row["Summary_Medium"] and "Strong Buy" in row["Summary_Long"]:
+            return "Strong Buy"
+        elif "Strong Sell" in row["Summary_Medium"] and "Strong Sell" in row["Summary_Long"]:
+            return "Strong Sell"
+        else:
+            return "Neutral"
 
+    filtered["Trend"] = filtered.apply(combine_trend, axis=1)
+
+    # Sort by Volume descending
+    def parse_volume(v):
+        try:
+            return float(str(v).replace("x", ""))
+        except:
+            return 0.0
+
+    filtered["VolumeValue"] = filtered["Volume"].apply(parse_volume)
+    filtered = filtered.sort_values(by="VolumeValue", ascending=False).drop(columns=["VolumeValue"])
+
+    # --- Final Display ---
     if not filtered.empty:
-        print("📈 Stocks matching Strong Buy / Strong Sell logic across all timeframes:\n")
-        print(filtered.to_string(index=False))
+        print("\n" + "="*80)
+        print(f"📈 FINAL STRONG SIGNALS — NIFTY TREND: {nifty_trend.upper()}")
+        print("="*80)
+        print(filtered[["Symbol", "CMP", "Trend", "Volume"]].to_string(index=False))
+        filtered.to_excel(CONSOLIDATED_OUTPUT, index=False)
     else:
-        print("⚠️ No stocks found matching the criteria.\n")
+        print(f"\n⚠️ No Strong Buy/Sell signals. NIFTY TREND: {nifty_trend}\n")
 
-# -----------------------------
-# MAIN EXECUTION
-# -----------------------------
+
+# ---------------------------------------
+# Main Runner
+# ---------------------------------------
 if __name__ == "__main__":
-    print("🚀 Starting Auto Scanner Pipeline...\n")
+    print("Starting Auto Scanner Pipeline...\n")
+    nifty_trend, df_final = run_scanner_with_trend(period="5y", interval="1wk", output_filename="Nifty200_Weighted_Balanced_1W_fixed.xlsx")
+    run_scanner(period="2y", interval="1d", output_filename="Nifty200_Weighted_Balanced_1D_fixed.xlsx")
+    run_scanner(period="1y", interval="4h", output_filename="Nifty200_Weighted_Balanced_4H_fixed.xlsx")
+    run_scanner(period="60d", interval="1h", output_filename="Nifty200_Weighted_Balanced_1H_fixed.xlsx")
+    run_scanner(period="60d", interval="30m", output_filename="Nifty200_Weighted_Balanced_30M_fixed.xlsx")
 
-    run_script("1W.py")
-    run_script("1D.py")
-    run_script("4H.py")
-    run_script("1H.py")
-    run_script("30M.py")
+    # Read Nifty Trend saved by 1W.py
+    nifty_trend = "Neutral"
+    try:
+        if os.path.exists("Nifty_Trend.txt"):
+            nifty_trend = open("Nifty_Trend.txt").read().strip() or "Neutral"
+    except Exception:
+        nifty_trend = "Neutral"
 
-    consolidate_outputs()
-
+    consolidate_outputs(nifty_trend)
     print("\n🌟 All tasks completed successfully!\n")

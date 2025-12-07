@@ -1,226 +1,261 @@
-# app.py
 import streamlit as st
-import subprocess, os, sys, time, random
-from pathlib import Path
-import streamlit.components.v1 as components
+import subprocess
+import time
+import pandas as pd
+import threading
+import os
 
-# Page config
+# ---------- Page Setup ----------
 st.set_page_config(page_title="Nifty 200 AI Scanner", layout="wide")
 
-# ------------------------------  MATERIAL UI (GOOGLE STYLE)  -------------------------------- #
+# ---------- CSS ----------
 st.markdown("""
-<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
-
 <style>
-:root {
-    --bg: #f8f9fa;
-    --card: #ffffff;
-    --border: #e2e8f0;
-    --text: #1e293b;
-    --muted: #64748b;
-    --primary: #1a73e8;
-    --primary-hover: #1664c4;
-    --radius: 10px;
-}
+    /* Top spacing */
+    .block-container {
+        padding-top: 80px !important;
+    }
 
-html, body, .main, .block-container {
-    background: var(--bg);
-    color: var(--text);
-    font-family: 'Roboto', sans-serif;
-    margin: 0;
-    padding: 0;
-}
+    /* Import Darkly CSS */
+    @import url('https://bootswatch.com/5/darkly/bootstrap.min.css');
 
-/*************** NAVBAR (Fixed Top) ***************/
-.navbar {
-    width: 100%;
-    background: white;
-    border-bottom: 1px solid var(--border);
-    position: fixed;
-    top:0;
-    left:0;
-    z-index: 9999;
-    padding: 14px 28px;
-    box-sizing: border-box;
-}
-.nav-title {
-    font-size: 22px;
-    font-weight: 500;
-}
-.nav-subtitle {
-    margin-top: -2px;
-    font-size: 13.5px;
-    color: var(--muted);
-}
+    /* Background Alignment */
+    body, .stApp, .main {
+        background-color: #222 !important;
+        color: #fff !important;
+    }
 
-/* Content padding so navbar does not overlap */
-.block-container {
-    padding-top: 120px !important;
-}
+    /* Title */
+    .main-heading {
+        font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+        font-size: 2.5rem;
+        font-weight: 700;
+        color: #ffffff;
+        text-align: center;
+        margin: 0 0 6px 0;
+        line-height: 1.1;
+    }
 
-/*************** CARD ***************/
-.card {
-    background: var(--card);
-    border-radius: var(--radius);
-    padding: 24px;
-    border: 1px solid var(--border);
-    box-shadow: 0px 4px 12px rgba(0,0,0,0.06);
-    margin-bottom: 30px;
-}
+    .sub-heading {
+        font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: #adb5bd;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        text-align: center;
+        margin: 0 0 20px 0;
+    }
 
-/*************** BUTTONS (Material Style) ***************/
-.stButton>button {
-    width: 100%;
-    background: var(--primary) !important;
-    color: white !important;
-    border-radius: 6px;
-    padding: 10px 18px;
-    font-size: 15px;
-    font-weight: 500;
-    border: none;
-    transition: all .18s ease-in-out;
-}
-.stButton>button:hover {
-    background: var(--primary-hover) !important;
-    transform: translateY(-1px);
-}
+    /* Buttons */
+    .button-container { display:flex; justify-content:center; gap:24px; margin-bottom:22px; }
+    .stButton>button {
+        display:inline-block;
+        min-width:180px;
+        padding:8px 16px;
+        font-size:16px;
+        font-weight:600;
+        font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+        border-radius:6px;
 
-/*************** PROGRESS BAR ***************/
-.progress-bar {
-  width: 100%;
-  height: 10px;
-  border-radius: var(--radius);
-  background: #e4e7eb;
-  margin-top: 18px;
-}
-.progress-fill {
-  height: 10px;
-  border-radius: var(--radius);
-  transition: width .25s ease;
-  background: var(--primary);
-}
+        background-color:#375a7f !important;
+        border:1px solid #2b4763 !important;
+        color:#ffffff !important;
+    }
+    .stButton>button:hover {
+        background-color:#2b4763 !important;
+        border-color:#1f3347 !important;
+        color:#ffffff !important;
+    }
 
-/*************** CONSOLE ***************/
-pre, code, .stCode {
-    width: 100% !important;
-    max-width: 100% !important;
-}
-pre {
-    background: #f1f3f4 !important;
-    padding: 18px !important;
-    border-radius: var(--radius) !important;
-    font-size: 13px !important;
-    line-height: 1.5 !important;
-    border: 1px solid #e0e0e0 !important;
-    overflow-x: auto !important;
-}
+    /* Table Container */
+    .table-container {
+        width:100%;
+        margin:20px 0;
+        padding:0;
+        background:#2b2b2b;
+        border-radius:10px;
+        box-shadow:0 4px 12px rgba(0,0,0,0.35);
+        overflow:hidden;
+    }
+
+    .table-container table {
+        width:100% !important;
+        border-collapse:collapse;
+    }
+
+    .table-container thead th {
+        background:#375a7f !important;
+        color:#fff !important;
+        font-weight:600;
+        border-bottom:1px solid rgba(255,255,255,0.15);
+        padding:12px 14px;
+        position:sticky;
+        top:0;
+        z-index:5;
+    }
+
+    /* Make each row carry its own background so hover can work */
+    .table-container tbody tr {
+        background-color: #ffffff;
+    }
+
+    .table-container tbody td {
+        padding:12px 14px;
+        vertical-align:middle;
+        border-bottom:1px solid #ddd;
+        /* IMPORTANT: make cell background transparent so tr:hover shows */
+        background: transparent !important;
+    }
+
+    /* Alternating stripe (rows) */
+    .table-container tbody tr:nth-child(odd):not(.success-row):not(.danger-row) {
+        background-color:#fafafa !important;
+    }
+
+    /* Hover: change the cells' background when the row is hovered */
+    .table-container tbody tr:hover td {
+        background-color:#e6e6e6 !important;
+    }
+
+    /* Success / Danger row colors (matching Darkly palette) */
+    .success-row td { background-color:#1abc9c !important; color:#ffffff !important; font-weight:600; }
+    .danger-row td { background-color:#e74c3c !important; color:#ffffff !important; font-weight:600; }
+
+    /* Mobile Responsive */
+    @media (max-width: 640px) {
+        .block-container {
+            padding-left: 8px !important;
+            padding-right: 8px !important;
+        }
+        .table-container table {
+            font-size: 0.78rem !important;
+        }
+        .main-heading {
+            font-size: 1.8rem !important;
+        }
+        .sub-heading {
+            font-size: 0.85rem !important;
+        }
+        .stButton>button {
+            width: 100% !important;
+            min-width: 100% !important;
+            margin-bottom: 10px;
+        }
+    }
+
+    /* Progress Bar Color */
+    .stProgress > div > div > div > div {
+        background-color:#375a7f !important;
+        border-radius:4px;
+        height: 20px;
+    }
+
+    .no-border-table th, .no-border-table td { border:none !important; }
 </style>
 """, unsafe_allow_html=True)
 
-# ---------------------------  CENTERED HEADER SECTION  ------------------------------------ #
-# Use components.html to reliably render the centered header (avoids escaping)
-header_html = """
-<div style="width:100%; text-align:center; margin-top: 6px; padding: 10px 0 20px 0;">
-  <h1 style="font-size: 32px; font-weight: 500; color: #1e293b; margin: 0 0 6px 0;">
-    NIFTY 200 AI Scanner
-  </h1>
-  <p style="font-size: 15px; color: #64748b; font-weight: 400; margin: 0;">
-    AI-driven market scanner — Intraday & Swing Trade modes
-  </p>
+# ---------- Header ----------
+st.markdown("<div class='main-heading'>Nifty 200 AI Scanner</div>", unsafe_allow_html=True)
+st.markdown("<div class='sub-heading'>AI-powered Analysis Dashboard</div>", unsafe_allow_html=True)
+
+
+# ---------- Script Runner ----------
+def run_script_with_progress(script, excel_out):
+    done_flag = threading.Event()
+
+    def worker():
+        try:
+            subprocess.run(["python", "-X", "utf8", script],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        finally:
+            done_flag.set()
+
+    threading.Thread(target=worker, daemon=True).start()
+
+    progress_area = st.container()
+    with progress_area:
+        st.markdown("<div class='progress-wrapper'>", unsafe_allow_html=True)
+        progress_bar = st.progress(0.0)
+        progress_text = st.empty()
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    total_runtime = 270
+    value = 0.0
+    step = 1 / total_runtime
+
+    while not done_flag.is_set() and value < 0.98:
+        value += step
+        progress_bar.progress(value)
+        progress_text.markdown(f"<div class='progress-text'>{int(value*100)}%</div>",
+                               unsafe_allow_html=True)
+        time.sleep(1)
+
+    progress_bar.progress(1.0)
+    progress_text.markdown("<div class='progress-text'>100% – Consolidating results…</div>",
+                           unsafe_allow_html=True)
+    time.sleep(1)
+
+    output_area = st.container()
+    with output_area:
+        if os.path.exists(excel_out):
+            try:
+                df = pd.read_excel(excel_out)
+                if not df.empty:
+                    df = df.drop(columns=[c for c in ["Summary_Medium", "Summary_Long"] if c in df.columns])
+
+                    # -------- CMP ROUNDING ----------
+                    if "CMP" in df.columns:
+                        # numeric rounding (actual stored values)
+                        df["CMP"] = df["CMP"].astype(float).round(2)
+
+                    # Row Coloring (keeps inline styles for strong signals)
+                    def style_row(r):
+                        if isinstance(r.get("Trend"), str):
+                            if "Strong Buy" in r["Trend"]:
+                                return ['background-color:#eafaf6;color:#1abc9c;font-weight:400;']*len(r)
+                            elif "Strong Sell" in r["Trend"]:
+                                return ['background-color:#fdecea;color:#e74c3c;font-weight:400;']*len(r)
+                        return ['']*len(r)
+
+                    # Nifty Trend
+                    try:
+                        with open("Nifty_Trend.txt", "r") as f:
+                            nifty_value = f.read().strip()
+                        st.markdown(f"<div style='text-align:left; font-size:1.2rem; margin:10px 0;'><b>Nifty Trend:</b> {nifty_value}</div>", unsafe_allow_html=True)
+                    except:
+                        st.markdown("<div style='text-align:left; font-size:1.2rem; margin:10px 0; color:#bbb;'><b>Nifty Trend:</b> Not Available</div>", unsafe_allow_html=True)
+
+                    # Apply style + format CMP to exactly 2 decimals for display
+                    styled = df.style.apply(style_row, axis=1).format({"CMP": "{:.2f}"})
+                    styled_html = styled.hide(axis="index").to_html(classes="table table-hover table-dark no-border-table")
+
+                    st.markdown(f"<div class='table-container'>{styled_html}</div>", unsafe_allow_html=True)
+                else:
+                    st.warning("No strong signals found.")
+            except Exception as e:
+                st.error(f"Error reading output file: {e}")
+        else:
+            st.error("Output file not found.")
+
+
+# ---------- Buttons ----------
+st.markdown("<div class='button-container'>", unsafe_allow_html=True)
+col1, col2 = st.columns([1, 1])
+run_intraday = col1.button("Run Intraday Scanner", use_container_width=True)
+run_swing = col2.button("Run Swing Scanner", use_container_width=True)
+st.markdown("</div>", unsafe_allow_html=True)
+
+if run_intraday:
+    run_script_with_progress("run_all_intraday.py", "Nifty200_Consolidated_Output.xlsx")
+elif run_swing:
+    run_script_with_progress("run_all_swing.py", "Nifty200_Consolidated_Output.xlsx")
+
+
+# ---------- Footer ----------
+st.markdown("""
+<hr>
+<div style="text-align:center;color:gray;font-size:0.9em;">
+Developed by <b>Pradeep Kumar Palani</b>
 </div>
-"""
-# components.html will render HTML exactly and not be escaped; small height avoids huge iframe
-components.html(header_html, height=110)
-
-# ------------------------------------------------------------------------------------------- #
-#                           SCANNER FUNCTION (UNCHANGED)                                      #
-# ------------------------------------------------------------------------------------------- #
-def run_scanner(script, label):
-    if not Path(script).exists():
-        st.error(f"❌ {script} not found.")
-        return
-
-    env = os.environ.copy()
-    env["PYTHONIOENCODING"] = "utf-8"
-    cmd = [sys.executable, script]
-
-    anim = st.empty()
-    prog = st.empty()
-    logs_box = st.empty()
-
-    frames = ["[AI]","[AI..]","[AI...]","[AI↺]"]
-    colors = ["#1a73e8","#1664c4","#10b981"]
-    progress, i = 0, 0
-    logs = ""
-
-    with st.spinner(f"Running {label}..."):
-        proc = subprocess.Popen(
-            cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-            text=True, encoding="utf-8", errors="replace", env=env
-        )
-
-        for line in iter(proc.stdout.readline, ''):
-            if not line:
-                break
-
-            frame = frames[i % len(frames)]
-            color = colors[(progress // 34) % len(colors)]
-            progress = min(progress + random.randint(1,3), 100)
-
-            # Animation panel (kept as a card)
-            anim.markdown(
-                f"<div class='card' style='text-align:center;'><strong>{frame} {label} — scanning market data</strong></div>",
-                unsafe_allow_html=True
-            )
-
-            # Progress bar
-            prog.markdown(f"""
-                <div class='progress-bar'>
-                    <div class='progress-fill' style='width:{progress}%;background:{color};'></div>
-                </div>
-            """, unsafe_allow_html=True)
-
-            # Append logs (limit lines)
-            logs += line
-            if len(logs.splitlines()) > 400:
-                logs = "\n".join(logs.splitlines()[-400:])
-
-            # Render logs unchanged using st.code (full width via CSS above)
-            logs_box.code(logs, language="bash")
-
-            time.sleep(0.25)
-            i += 1
-
-        proc.wait()
-
-    # Finalize progress
-    prog.markdown("""
-        <div class='progress-bar'>
-            <div class='progress-fill' style='width:100%;background:#10b981;'></div>
-        </div>
-    """, unsafe_allow_html=True)
-
-    anim.markdown(
-        "<div class='card' style='text-align:center;'><strong>✅ Scan Complete — AI insights ready</strong></div>",
-        unsafe_allow_html=True
-    )
-
-# ------------------------------------------------------------------------------------------- #
-#                           BUTTON CARD (Material UI)                                         #
-# ------------------------------------------------------------------------------------------- #
-st.markdown('<div class="card">', unsafe_allow_html=True)
-
-col1, col2, col3 = st.columns([1,2,1])
-with col2:
-    b1, b2 = st.columns(2)
-    start_intraday = b1.button("Intraday Scanner")
-    start_swing = b2.button("Swing Trade Scanner")
-
-st.markdown('</div>', unsafe_allow_html=True)
-
-# Full-width output below card
-if start_intraday:
-    run_scanner("run_all_intraday.py", "Intraday Scanner")
-
-if start_swing:
-    run_scanner("run_all_swing.py", "Swing Trade Scanner")
+""", unsafe_allow_html=True)

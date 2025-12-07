@@ -4,6 +4,13 @@ import pandas as pd
 import sys
 import time
 from tqdm import tqdm
+from common_functions import run_scanner, run_scanner_with_trend, process_symbol_from_df_with_volume
+import sys
+
+# Disable tqdm progress bars if launched from Streamlit
+if "--no-tqdm" in sys.argv or "--safe" in sys.argv:
+    from tqdm import tqdm
+    tqdm.__init__ = lambda *args, **kwargs: iter([])
 
 # ---------------------------------------
 # File Paths
@@ -129,16 +136,12 @@ def consolidate_outputs(nifty_trend):
 # ---------------------------------------
 if __name__ == "__main__":
     print("Starting Auto Scanner Pipeline...\n")
-
-    scripts = ["30M.py", "15M.py", "5M.py", "2M.py", "1M.py"]
-    progress_steps = [20, 40, 60, 80, 100]
-
-    print("AI is scanning and processing indicators...\n")
-    for script, percent in zip(scripts, progress_steps):
-        run_script(script)
-        time.sleep(1)  # small delay to visualize progress
-        tqdm.write(f"Progress: {percent}% completed")
-
+    nifty_trend, df_final = run_scanner_with_trend(period="60d", interval="30m", output_filename="Nifty200_Weighted_Balanced_30M_fixed.xlsx")
+    run_scanner(period="14d", interval="15m", output_filename="Nifty200_Weighted_Balanced_15M_fixed.xlsx")
+    run_scanner(period="14d", interval="5m", output_filename="Nifty200_Weighted_Balanced_5M_fixed.xlsx")
+    run_scanner(period="2d", interval="2m", output_filename="Nifty200_Weighted_Balanced_2M_fixed.xlsx")
+    run_scanner(period="2d", interval="1m", output_filename="Nifty200_Weighted_Balanced_1M_fixed.xlsx")
+ 
     # Read Nifty Trend saved by 30M.py
     nifty_trend = "Neutral"
     try:
