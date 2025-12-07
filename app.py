@@ -9,8 +9,15 @@ from run_all_swing import main as run_swing_main
 
 
 # ---------- Page Setup ----------
-st.set_page_config(page_title="ScanBot AI", layout="wide", menu_items=None)
-
+st.set_page_config(page_title="ScanBot AI", layout="wide")
+hide_menu_style = """
+    <style>
+    #MainMenu {visibility: hidden;}  /* Hides the top-right menu */
+    footer {visibility: hidden;}     /* Hides “Made with Streamlit” */
+    header {visibility: hidden;}     /* Optional: hides the header */
+    </style>
+"""
+st.markdown(hide_menu_style, unsafe_allow_html=True)
 # ---------- CSS ----------
 st.markdown("""
 <style>
