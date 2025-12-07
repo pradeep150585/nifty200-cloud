@@ -134,7 +134,7 @@ def consolidate_outputs(nifty_trend):
 # ---------------------------------------
 # Main Runner
 # ---------------------------------------
-if __name__ == "__main__":
+def main():
     print("Starting Auto Scanner Pipeline...\n")
     nifty_trend, df_final = run_scanner_with_trend(period="5y", interval="1wk", output_filename="Nifty200_Weighted_Balanced_1W_fixed.xlsx")
     run_scanner(period="2y", interval="1d", output_filename="Nifty200_Weighted_Balanced_1D_fixed.xlsx")
@@ -142,7 +142,7 @@ if __name__ == "__main__":
     run_scanner(period="60d", interval="1h", output_filename="Nifty200_Weighted_Balanced_1H_fixed.xlsx")
     run_scanner(period="60d", interval="30m", output_filename="Nifty200_Weighted_Balanced_30M_fixed.xlsx")
 
-    # Read Nifty Trend saved by 1W.py
+    # Read trend
     nifty_trend = "Neutral"
     try:
         if os.path.exists("Nifty_Trend.txt"):
@@ -152,3 +152,7 @@ if __name__ == "__main__":
 
     consolidate_outputs(nifty_trend)
     print("\n🌟 All tasks completed successfully!\n")
+
+
+if __name__ == "__main__":
+    main()

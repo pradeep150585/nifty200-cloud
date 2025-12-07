@@ -4,6 +4,9 @@ import time
 import pandas as pd
 import threading
 import os
+from run_all_intraday import main as run_intraday_main
+from run_all_swing import main as run_swing_main
+
 
 # ---------- Page Setup ----------
 st.set_page_config(page_title="Nifty 200 AI Scanner", layout="wide")
@@ -162,17 +165,6 @@ st.markdown("<div class='sub-heading'>AI-powered Analysis Dashboard</div>", unsa
 
 # ---------- Script Runner ----------
 def run_script_with_progress(script, excel_out):
-    done_flag = threading.Event()
-
-    def worker():
-        try:
-            subprocess.run(["python", "-X", "utf8", script],
-                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        finally:
-            done_flag.set()
-
-    threading.Thread(target=worker, daemon=True).start()
-
     progress_area = st.container()
     with progress_area:
         st.markdown("<div class='progress-wrapper'>", unsafe_allow_html=True)
@@ -180,21 +172,28 @@ def run_script_with_progress(script, excel_out):
         progress_text = st.empty()
         st.markdown("</div>", unsafe_allow_html=True)
 
-    total_runtime = 600
-    value = 0.0
-    step = 1 / total_runtime
-
-    while not done_flag.is_set() and value < 0.98:
-        value += step
-        progress_bar.progress(value)
-        progress_text.markdown(f"<div class='progress-text'>{int(value*100)}%</div>",
+    try:
+        # Show progress while running inside same process
+        for i in range(5):
+            progress_bar.progress((i+1)*15)
+            progress_text.markdown(f"<div class='progress-text'>Running... ({(i+1)*15}%)</div>",
                                unsafe_allow_html=True)
+            time.sleep(0.5)
+
+        # Run scanner directly inside Streamlit (no subprocess)
+        if script == "run_all_intraday.py":
+            run_intraday_main()
+        else:
+            run_swing_main()
+
+        progress_bar.progress(100)
+        progress_text.markdown("<div class='progress-text'>Completed. Loading results…</div>",
+                           unsafe_allow_html=True)
         time.sleep(1)
 
-    progress_bar.progress(1.0)
-    progress_text.markdown("<div class='progress-text'>100% – Consolidating results…</div>",
+    except Exception as e:
+        progress_text.markdown(f"<div class='progress-text' style='color:red;'>Error: {e}</div>",
                            unsafe_allow_html=True)
-    time.sleep(1)
 
     output_area = st.container()
     with output_area:
