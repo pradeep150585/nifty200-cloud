@@ -229,16 +229,25 @@ def run_script_with_progress(script, excel_out):
                     # ✅ Clean column names to remove hidden spaces or case mismatches
                     df.columns = df.columns.str.strip().str.replace(r'\s+', '_', regex=True)
 
-                    # ✅ First calculate Trend using Summary_Medium and Summary_Long
+                    df["Trend"] = "Neutral"
+
+                    # --- Condition 1: Both Summary_Medium & Summary_Long are Strong Buy or Strong Sell
+                    mask1 = pd.Series(False, index=df.index)
                     if all(c in df.columns for c in ["Summary_Medium", "Summary_Long"]):
-                        df["Trend"] = df.apply(
-                            lambda x: (
-                                "Strong Buy" if x["Summary_Medium"] == "Strong Buy" and x["Summary_Long"] == "Strong Buy"
-                                else "Strong Sell" if x["Summary_Medium"] == "Strong Sell" and x["Summary_Long"] == "Strong Sell"
-                                else "Neutral"
-                            ),
-                            axis=1
+                        mask1 = (
+                        ((df["Summary_Medium"] == "Strong Buy") & (df["Summary_Long"] == "Strong Buy")) |
+                        ((df["Summary_Medium"] == "Strong Sell") & (df["Summary_Long"] == "Strong Sell"))
                         )
+                        df.loc[mask1, "Trend"] = df.loc[mask1, "Summary_Medium"]
+
+                    # --- Condition 2: VolumeRatio > 1.5 → include all, Trend = Summary_Medium
+                    mask2 = pd.Series(False, index=df.index)
+                    if "VolumeRatio" in df.columns and "Summary_Medium" in df.columns:
+                        mask2 = df["VolumeRatio"] > 1.5
+                        df.loc[mask2, "Trend"] = df.loc[mask2, "Summary_Medium"]
+
+                    # ✅ Combine both conditions — keep any stock satisfying either condition
+                    df = df[mask1 | mask2]
 
                     # Remove Summary_Medium and Summary_Long from final table
                     columns_to_remove = ["Summary_Medium", "Summary_Long"]

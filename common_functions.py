@@ -17,7 +17,7 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 # -----------------------
 # CONFIG
 # -----------------------
-NIFTY200_URL = "https://archives.nseindia.com/content/indices/ind_nifty200list.csv"
+NIFTY200_URL = "https://nsearchives.nseindia.com/content/indices/ind_nifty200list.csv"
 MOM_PERIOD = 10
 MIN_ROWS_REQUIRED = 80
 MAX_WORKERS = 6
@@ -27,13 +27,37 @@ SLEEP_BETWEEN_BATCHES = 0.5
 # UTILITIES
 # -----------------------
 def fetch_nifty200_symbols() -> List[str]:
-    r = requests.get(NIFTY200_URL, timeout=20, headers={"User-Agent": "Mozilla/5.0"})
-    r.raise_for_status()
-    df = pd.read_csv(io.StringIO(r.text))
-    sym_col = [c for c in df.columns if "symbol" in c.lower()][0]
-    symbols = df[sym_col].astype(str).str.strip().tolist()
-    return [s.upper() + ".NS" for s in symbols]
+    """
+    Fetch Nifty 200 stock symbols using browser-like headers.
+    Falls back to local CSV if online fetch fails.
+    """
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Referer": "https://www.nseindia.com/",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+        "Connection": "keep-alive"
+    }
 
+    try:
+        response = requests.get(NIFTY200_URL, headers=headers, timeout=10)
+        response.raise_for_status()
+        df = pd.read_csv(io.StringIO(response.text))
+        sym_col = [c for c in df.columns if "symbol" in c.lower()][0]
+        symbols = df[sym_col].astype(str).str.strip().tolist()
+        print(f"✅ Successfully fetched {len(symbols)} symbols from NSE")
+        return [s.upper() + ".NS" for s in symbols]
+    except Exception as e:
+        print(f"⚠ Error fetching NSE data ({e}). Trying local cache...")
+        try:
+            df = pd.read_csv("ind_nifty200list.csv")
+            sym_col = [c for c in df.columns if "symbol" in c.lower()][0]
+            symbols = df[sym_col].astype(str).str.strip().tolist()
+            print(f"✅ Loaded {len(symbols)} symbols from local CSV")
+            return [s.upper() + ".NS" for s in symbols]
+        except Exception as e2:
+            print(f"❌ Failed to load local copy ({e2})")
+            return []
 
 def chunked(seq, n):
     for i in range(0, len(seq), n):
