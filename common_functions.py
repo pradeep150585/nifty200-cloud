@@ -17,7 +17,7 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 # -----------------------
 # CONFIG
 # -----------------------
-NIFTY200_URL = "https://nsearchives.nseindia.com/content/indices/ind_nifty200list.csv"
+NIFTY200_URL = "https://archives.nseindia.com/content/indices/ind_nifty200list.csv"
 MOM_PERIOD = 10
 MIN_ROWS_REQUIRED = 80
 MAX_WORKERS = 6
