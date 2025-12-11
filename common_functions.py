@@ -28,36 +28,38 @@ SLEEP_BETWEEN_BATCHES = 0.5
 # -----------------------
 def fetch_nifty200_symbols() -> List[str]:
     """
-    Fetch Nifty 200 stock symbols using browser-like headers.
-    Falls back to local CSV if online fetch fails.
+    Always download the Nifty 200 stock list freshly from NSE API.
+    No cache, no fallback — if it fails, raise an exception.
     """
+    url = "https://www.nseindia.com/api/equity-stockIndices?index=NIFTY%20200"
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
         "Accept-Language": "en-US,en;q=0.9",
         "Referer": "https://www.nseindia.com/",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-        "Connection": "keep-alive"
     }
 
     try:
-        response = requests.get(NIFTY200_URL, headers=headers, timeout=10)
+        print("🌐 Downloading Nifty 200 list from NSE...")
+        session = requests.Session()
+        # NSE requires an initial request to set cookies
+        session.get("https://www.nseindia.com", headers=headers, timeout=10)
+        response = session.get(url, headers=headers, timeout=10)
         response.raise_for_status()
-        df = pd.read_csv(io.StringIO(response.text))
-        sym_col = [c for c in df.columns if "symbol" in c.lower()][0]
-        symbols = df[sym_col].astype(str).str.strip().tolist()
-        print(f"✅ Successfully fetched {len(symbols)} symbols from NSE")
+
+        data = response.json()
+        if "data" not in data:
+            raise ValueError("Unexpected response format from NSE API")
+
+        df = pd.DataFrame(data["data"])
+        df.to_csv("ind_nifty200list.csv", index=False)
+        symbols = df["symbol"].astype(str).str.strip().tolist()
+
+        print(f"✅ Successfully downloaded {len(symbols)} Nifty 200 symbols from NSE")
         return [s.upper() + ".NS" for s in symbols]
+
     except Exception as e:
-        print(f"⚠ Error fetching NSE data ({e}). Trying local cache...")
-        try:
-            df = pd.read_csv("ind_nifty200list.csv")
-            sym_col = [c for c in df.columns if "symbol" in c.lower()][0]
-            symbols = df[sym_col].astype(str).str.strip().tolist()
-            print(f"✅ Loaded {len(symbols)} symbols from local CSV")
-            return [s.upper() + ".NS" for s in symbols]
-        except Exception as e2:
-            print(f"❌ Failed to load local copy ({e2})")
-            return []
+        print(f"❌ Failed to download Nifty 200 list: {e}")
+        raise SystemExit("Stopping execution — Unable to fetch Nifty 200 list from NSE.")
 
 def chunked(seq, n):
     for i in range(0, len(seq), n):
@@ -453,4 +455,3 @@ def run_scanner_with_volume(period, interval, output_filename, batch_size=20, ve
     final_df.to_excel(output_filename, index=False)
     print(f"\nSaved: {output_filename} ({datetime.now().strftime('%Y-%m-%d %H:%M:%S')})")
     return final_df
-

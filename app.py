@@ -4,6 +4,7 @@ import time
 import pandas as pd
 import threading
 import os
+from common_functions import fetch_nifty200_symbols
 from run_all_intraday import main as run_intraday_main
 from run_all_swing import main as run_swing_main
 
@@ -297,7 +298,21 @@ run_intraday = col1.button("Run Intraday Scanner", use_container_width=True)
 run_swing = col2.button("Run Swing Scanner", use_container_width=True)
 st.markdown("</div>", unsafe_allow_html=True)
 
-if run_intraday:
-    run_script_with_progress("run_all_intraday.py", "Nifty200_Consolidated_Output.xlsx")
-elif run_swing:
-    run_script_with_progress("run_all_swing.py", "Nifty200_Consolidated_Output.xlsx")
+if run_intraday or run_swing:
+    try:
+        # Step 1: Always download latest Nifty 200 list
+        fetch_nifty200_symbols()
+        st.success("✅ Nifty 200 list downloaded successfully!")
+
+        # Step 2: Run selected scanner
+        if run_intraday:
+            st.info("🚀 Running Intraday Scanner...")
+            run_script_with_progress("run_all_intraday.py", "Nifty200_Consolidated_Output.xlsx")
+        elif run_swing:
+            st.info("📊 Running Swing Scanner...")
+            run_script_with_progress("run_all_swing.py", "Nifty200_Consolidated_Output.xlsx")
+
+    except SystemExit as e:
+        st.error(f"❌ {e}")
+    except Exception as e:
+        st.error(f"⚠️ Unexpected error: {e}")
