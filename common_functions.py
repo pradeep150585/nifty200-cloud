@@ -109,7 +109,7 @@ def compute_indicators_vectorized(df: pd.DataFrame, mom_period=MOM_PERIOD) -> pd
     avg_loss = wilder_smooth(loss, period_rsi)
     RS = safe_div(avg_gain, avg_loss)
     df["RSI"] = 100 - (100 / (1 + RS))
-    df["RSI_Rating"] = df["RSI"].apply(lambda v: "Buy" if v < 30 else ("Sell" if v > 70 else "Neutral"))
+    df["RSI_Rating"] = df["RSI"].apply(lambda v: "Buy" if v > 60 else ("Sell" if v < 30 else "Neutral"))
 
     # Stochastic Oscillator (9,3,3)
     period_stoch = 9
@@ -154,7 +154,7 @@ def compute_indicators_vectorized(df: pd.DataFrame, mom_period=MOM_PERIOD) -> pd
     DIm = 100 * safe_div(DMm_w, df["ATR"])
     DX = 100 * safe_div((DIp - DIm).abs(), (DIp + DIm))
     ADX = wilder_smooth(DX, 14)
-    df["ADX_Rating"] = ["Buy" if (a > 25 and b > c) else ("Sell" if (a > 25 and c > b) else "Neutral")
+    df["ADX_Rating"] = ["Buy" if (a > 30 and b > c) else ("Sell" if (a > 30 and c > b) else "Neutral")
                         for a, b, c in zip(ADX, DIp, DIm)]
 
     # Williams %R

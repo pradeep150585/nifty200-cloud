@@ -301,6 +301,7 @@ st.markdown("</div>", unsafe_allow_html=True)
 if run_intraday or run_swing:
     try:
         # Step 1: Always download latest Nifty 200 list
+        st.info("🌐 Downloading latest Nifty 200 stock list from NSE...")
         fetch_nifty200_symbols()
         st.success("✅ Nifty 200 list downloaded successfully!")
 
