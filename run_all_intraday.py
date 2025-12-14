@@ -53,7 +53,7 @@ def safe_load(path):
 # ---------------------------------------
 # Consolidate All Outputs + Filter Final (Safe Version)
 # ---------------------------------------
-def consolidate_outputs(nifty_trend, indices_file_path):
+def consolidate_outputs(nifty_trend, indices_file):
     print("\n📊 Consolidating all timeframe outputs...")
 
     # Timeframes for intraday analysis
