@@ -1,0 +1,15 @@
+Bank - ^NSEBANK
+Auto - ^CNXAUTO
+Energy - ^CNXENERGY
+FMCG - ^CNXFMCG
+Infrastructure - ^CNXINFRA
+IT - ^CNXIT
+Metal - ^CNXMETAL
+PSE - ^CNXPSE
+Reality - ^CNXREALTY
+Consumer - ^CNXCONSUM
+Commodities - ^CNXCMDT
+Media - ^CNXMEDIA
+Pharma - ^CNXPHARMA
+Fianance - ^CNXFIN
+PSU Bank - ^CNXPSUBANK

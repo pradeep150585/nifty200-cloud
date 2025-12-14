@@ -2,6 +2,7 @@ import io
 import math
 import time
 import requests
+import os
 from datetime import datetime
 from typing import List
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -53,7 +54,7 @@ def fetch_nifty200_symbols() -> List[str]:
         df = pd.DataFrame(data["data"])
         df.to_csv("ind_nifty200list.csv", index=False)
         symbols = df["symbol"].astype(str).str.strip().tolist()
-
+        symbols = [s for s in symbols if s.isalpha() and len(s) <= 10]
         print(f"✅ Successfully downloaded {len(symbols)} Nifty 200 symbols from NSE")
         return [s.upper() + ".NS" for s in symbols]
 
@@ -239,7 +240,8 @@ def process_symbol_from_df(symbol: str, df_tk: pd.DataFrame):
             "Change%": change_pct,
             "Net_Score": int(last["Net_Score"]),
             "Weighted_Net_Score": int(last["Weighted_Net_Score"]),
-            "Summary": last["Summary"]
+            "Summary": last["Summary"],
+            "RSI": round(float(last.get("RSI", np.nan)), 2) if "RSI" in df_ind.columns else np.nan
         }
     except Exception:
         return None
@@ -361,6 +363,104 @@ def get_nifty_trend_summary(interval="30m"):
     print(f"📈 NIFTY SUMMARY: {last_summary} → TREND: {trend}")
     return trend
 
+# -----------------------
+# INDEX SUMMARY TABLE (Final Optimized Version)
+# -----------------------
+def get_indices_summary(file_path, interval="30m"):
+    """
+    Read indices.txt formatted as:
+    Bank - ^NSEBANK
+    Nifty - ^NSEI
+    FinServ - ^CNXFINANCE
+
+    For each index, compute Trend, RSI, and Change% using the given interval.
+    """
+
+    import os
+
+    if not os.path.exists(file_path):
+        print(f"⚠️ Missing indices file: {file_path}")
+        return pd.DataFrame()
+
+    # Read "Name - Symbol" pairs
+    pairs = []
+    with open(file_path, "r") as f:
+        for line in f:
+            line = line.strip()
+            if not line or "-" not in line:
+                continue
+            name, symbol = [x.strip() for x in line.split("-", 1)]
+            pairs.append((name, symbol))
+
+    if not pairs:
+        print("⚠️ No valid index entries found in indices.txt")
+        return pd.DataFrame()
+
+    results = []
+
+    for name, symbol in pairs:
+        try:
+            df = yf.download(symbol, period="60d", interval=interval, progress=False)
+
+            # Flatten MultiIndex and normalize columns
+            if isinstance(df.columns, pd.MultiIndex):
+                df.columns = [c[0] for c in df.columns]
+            df.columns = [str(c).capitalize().strip() for c in df.columns]
+
+            # Ensure essential columns exist
+            if not {"Close", "High", "Low"}.issubset(df.columns):
+                print(f"⚠️ Skipping {name} ({symbol}) — missing required OHLC columns.")
+                continue
+
+            if df.empty or len(df) < 10:
+                print(f"⚠️ Skipping {name} ({symbol}) — insufficient data.")
+                continue
+
+            # Compute indicators
+            df = compute_indicators_vectorized(df)
+            last = df.iloc[-1]
+            prev = df.iloc[-2]
+
+            cmp_price = float(last["Close"])
+            prev_price = float(prev["Close"])
+            change_pct = round((cmp_price - prev_price) / prev_price * 100, 2)
+            rsi = round(float(last.get("RSI", np.nan)), 2)
+
+            summary = last.get("Summary", "Neutral")
+
+            # Simplified trend mapping
+            if "Strong Buy" in summary:
+                trend = "Bullish"
+            elif "Strong Sell" in summary:
+                trend = "Bearish"
+            elif "Buy" in summary:
+                trend = "Mild Bullish"
+            elif "Sell" in summary:
+                trend = "Mild Bearish"
+            else:
+                trend = "Neutral"
+
+            results.append({
+                "Indices Name": name,
+                "Trend": trend,
+                "RSI": rsi,
+                "Change%": change_pct
+            })
+
+        except Exception as e:
+            print(f"⚠️ Error processing {name} ({symbol}): {e}")
+            continue
+
+    if not results:
+        print("⚠️ No valid index data processed.")
+        return pd.DataFrame()
+
+    df_final = pd.DataFrame(results)
+    df_final = df_final.round(2)
+
+    # Sort by RSI descending
+    df_final = df_final.sort_values(by="RSI", ascending=False).reset_index(drop=True)
+    return df_final
 
 # -----------------------
 # ENHANCED PROCESSING (with volume ratio)

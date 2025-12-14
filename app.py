@@ -208,9 +208,82 @@ def run_script_with_progress(script, excel_out):
 
     try:
         if script == "run_all_intraday.py":
-            run_intraday_main(progress_callback)
+            indices_df, final_df = run_intraday_main(progress_callback, streamlit_mode=True)
         else:
-            run_swing_main(progress_callback)
+            indices_df, final_df = run_swing_main(progress_callback, streamlit_mode=True)
+
+        # ---- Normalize Indices Trend labels (UI layer) ----
+        if isinstance(indices_df, pd.DataFrame) and not indices_df.empty:
+            if "Trend" in indices_df.columns:
+                indices_df["Trend"] = indices_df["Trend"].replace({
+                    # Strong signals
+                    "Strong Bullish": "Strong Buy",
+                    "Bullish": "Strong Buy",
+                    "Strong Bearish": "Strong Sell",
+                    "Bearish": "Strong Sell",
+
+                    # Mild signals
+                    "Mild Bullish": "Buy",
+                    "Mild Bearish": "Sell"
+                })
+
+        # ---- Format Indices numeric columns (2 decimals) ----
+        if isinstance(indices_df, pd.DataFrame) and not indices_df.empty:
+            for col in ["RSI", "Change%"]:
+                if col in indices_df.columns:
+                    indices_df[col] = pd.to_numeric(
+                        indices_df[col], errors="coerce"
+                    ).round(2)
+
+        # --- Display Indices Summary Table ---
+        if isinstance(indices_df, pd.DataFrame) and not indices_df.empty:
+            st.markdown("<div style='text-align:left; font-size:1.3rem; margin:10px 0;'><b>📊 Indices Summary</b></div>", unsafe_allow_html=True)
+
+            def highlight_trend(row):
+                color = "black"
+                if "Bullish" in row["Trend"]:
+                    color = "green"
+                elif "Bearish" in row["Trend"]:
+                    color = "red"
+                return [f"color: {color}; font-weight: bold;" if col == "Trend" else "" for col in row.index]
+
+            def style_indices_row(r):
+                if r["Trend"] == "Strong Buy":
+                    return ['color:#1abc9c;font-weight:400;'] * len(r)
+                elif r["Trend"] == "Buy":
+                    return ['color:#27ae60;font-weight:400;'] * len(r)
+                elif r["Trend"] == "Strong Sell":
+                    return ['color:#e74c3c;font-weight:400;'] * len(r)
+                elif r["Trend"] == "Sell":
+                    return ['color:#c0392b;font-weight:400;'] * len(r)
+                else:
+                    return ['color:#000000;font-weight:400;'] * len(r)
+
+            styled_indices = (
+                indices_df
+                .style
+                .apply(style_indices_row, axis=1)
+                .format({
+                    "RSI": "{:.2f}",
+                    "Change%": "{:.2f}"
+                })
+            )
+
+            if hasattr(styled_indices, "hide_index"):
+                styled_indices = styled_indices.hide_index()
+            else:
+                styled_indices = styled_indices.hide(axis="index")
+
+            indices_html = styled_indices.to_html(
+                classes="table table-hover table-dark no-border-table"
+            )
+
+            st.markdown(
+                f"<div class='table-container'>{indices_html}</div>",
+                unsafe_allow_html=True
+            )
+        else:
+            st.warning("⚠ No indices summary data found.")
 
         progress_bar.progress(100)
         progress_text.markdown("<div style='text-align:center;'>Completed. Loading results…</div>", unsafe_allow_html=True)
@@ -230,39 +303,44 @@ def run_script_with_progress(script, excel_out):
                     # ✅ Clean column names to remove hidden spaces or case mismatches
                     df.columns = df.columns.str.strip().str.replace(r'\s+', '_', regex=True)
 
+                    # ---- Final Trend calculation ----
                     df["Trend"] = "Neutral"
 
-                    # --- Condition 1: Both Summary_Medium & Summary_Long are Strong Buy or Strong Sell
-                    mask1 = pd.Series(False, index=df.index)
-                    if all(c in df.columns for c in ["Summary_Medium", "Summary_Long"]):
-                        mask1 = (
-                        ((df["Summary_Medium"] == "Strong Buy") & (df["Summary_Long"] == "Strong Buy")) |
-                        ((df["Summary_Medium"] == "Strong Sell") & (df["Summary_Long"] == "Strong Sell"))
+                    if all(c in df.columns for c in ["Summary_Short", "Summary_Long"]):
+                        strong_buy = (
+                            (df["Summary_Short"] == "Strong Buy") &
+                            (df["Summary_Long"] == "Strong Buy")
                         )
-                        df.loc[mask1, "Trend"] = df.loc[mask1, "Summary_Medium"]
 
-                    # --- Condition 2: VolumeRatio > 1.5 → include all, Trend = Summary_Medium
-                    mask2 = pd.Series(False, index=df.index)
-                    if "VolumeRatio" in df.columns and "Summary_Medium" in df.columns:
-                        mask2 = df["VolumeRatio"] > 1.5
-                        df.loc[mask2, "Trend"] = df.loc[mask2, "Summary_Medium"]
+                        strong_sell = (
+                            (df["Summary_Short"] == "Strong Sell") &
+                            (df["Summary_Long"] == "Strong Sell")
+                        )
+
+                        df.loc[strong_buy, "Trend"] = "Strong Buy"
+                        df.loc[strong_sell, "Trend"] = "Strong Sell"
 
                     # ✅ Combine both conditions — keep any stock satisfying either condition
-                    df = df[mask1 | mask2]
+                    df = df.copy()
+                    if df.empty:
+                        st.warning("No stocks matched final UI conditions.")
+                        return
 
-                    # Remove Summary_Medium and Summary_Long from final table
-                    columns_to_remove = ["Summary_Medium", "Summary_Long"]
-                    df.drop(columns=[c for c in columns_to_remove if c in df.columns], inplace=True)
+                    # ---- Remove unwanted columns from Stock Summary ----
+                    for col in ["Summary_Short", "Summary_Long"]:
+                        if col in df.columns:
+                            df.drop(columns=col, inplace=True)
 
                     if "CMP" in df.columns:
                         df["CMP"] = df["CMP"].astype(float).round(2)
 
                     def style_row(r):
-                        if isinstance(r.get("Trend"), str):
-                            if "Strong Buy" in r["Trend"]:
-                                return ['background-color:#eafaf6;color:#1abc9c;font-weight:400;'] * len(r)
-                            elif "Strong Sell" in r["Trend"]:
-                                return ['background-color:#fdecea;color:#e74c3c;font-weight:400;'] * len(r)
+                        if r.get("Trend") == "Strong Buy":
+                            return ['color:#1abc9c;font-weight:400;'] * len(r)
+                        elif r.get("Trend") == "Strong Sell":
+                            return ['color:#e74c3c;font-weight:400;'] * len(r)
+                        elif r.get("Trend") == "Neutral":
+                            return ['color:#000000;font-weight:400;'] * len(r)
                         return [''] * len(r)
 
                     try:
@@ -272,14 +350,22 @@ def run_script_with_progress(script, excel_out):
                     except:
                         st.markdown("<div style='text-align:left; font-size:1.2rem; margin:10px 0; color:#bbb;'><b>Nifty Trend:</b> Not Available</div>", unsafe_allow_html=True)
 
-                    styled = df.style.apply(style_row, axis=1).format({"CMP": "{:.2f}"})
+                    styled = (
+                        df.style
+                        .apply(style_row, axis=1)
+                        .format({
+                            "CMP": "{:.2f}",
+                            "RSI": "{:.2f}",
+                            "Change%": "{:.2f}"
+                        })
+                    )
 
                     if hasattr(styled, "hide_index"):
                         styled = styled.hide_index()
                     else:
                         styled = styled.hide(axis="index")
 
-                    styled_html = styled.to_html(classes="table table-hover table-dark no-border-table")
+                    styled_html = styled.to_html(classes="table table-hover no-border-table")
                     st.markdown(f"<div class='table-container'>{styled_html}</div>", unsafe_allow_html=True)
 
                 else:
