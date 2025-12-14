@@ -6,7 +6,6 @@ import time
 from tqdm import tqdm
 from common_functions import get_indices_summary
 from common_functions import run_scanner, run_scanner_with_trend, process_symbol_from_df_with_volume
-from common_functions import INDICES_FILE
 import sys
 
 # Disable tqdm progress bars if launched from Streamlit
