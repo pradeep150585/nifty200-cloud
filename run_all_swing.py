@@ -93,7 +93,7 @@ def consolidate_outputs(nifty_trend):
 
     if final.empty:
         print("⚠ No data after merging — skipping.")
-        indices_summary = get_indices_summary("indices.txt", interval="4h")
+        indices_summary = get_indices_summary(INDICES_FILE, interval="4h")
         return indices_summary, pd.DataFrame()
 
     # Filter strong signals
@@ -114,7 +114,7 @@ def consolidate_outputs(nifty_trend):
 
     if filtered.empty:
         print("⚠ No stocks matching strong conditions.")
-        indices_summary = get_indices_summary("indices.txt", interval="4h")
+        indices_summary = get_indices_summary(INDICES_FILE, interval="4h")
         return indices_summary, pd.DataFrame()
 
     # Combine Medium + Long Summary → Trend
@@ -140,7 +140,7 @@ def consolidate_outputs(nifty_trend):
     filtered = filtered.sort_values(by="VolumeValue", ascending=False).drop(columns=["VolumeValue"])
 
     # --- Indices Summary ---
-    indices_summary = get_indices_summary("indices.txt", interval="4h")
+    indices_summary = get_indices_summary(INDICES_FILE, interval="4h")
     if not indices_summary.empty:
         indices_summary = indices_summary[["Indices Name", "Trend", "RSI", "Change%"]]
         indices_summary = indices_summary.round(2)
@@ -229,7 +229,7 @@ def main(progress_callback=None, streamlit_mode=False):
     print("\n🌟 Swing Scan Completed Successfully!\n")
 
     # --- Prepare Output Data ---
-    indices_summary = get_indices_summary("indices.txt", interval="4h")
+    indices_summary = get_indices_summary(INDICES_FILE, interval="4h")
     final_df = pd.read_excel("Nifty200_Consolidated_Output.xlsx") if os.path.exists("Nifty200_Consolidated_Output.xlsx") else pd.DataFrame()
 
     # --- Streamlit Mode ---
