@@ -6,6 +6,7 @@ import time
 from tqdm import tqdm
 from common_functions import get_indices_summary
 from common_functions import run_scanner, run_scanner_with_trend, process_symbol_from_df_with_volume
+from common_functions import INDICES_FILE
 import sys
 
 # Disable tqdm progress bars if launched from Streamlit
@@ -63,7 +64,7 @@ def consolidate_outputs(nifty_trend):
     # ✅ Early exit if any timeframe file missing or empty
     if any(df is None or df.empty for df in dfs):
         print("⚠ Some timeframe data missing. Skipping consolidation.")
-        indices_summary = get_indices_summary("indices.txt", interval="30m")
+        indices_summary = get_indices_summary(INDICES_FILE, interval="30m")
         return indices_summary, pd.DataFrame()
 
     df1, df2, df3, df4, df5 = dfs

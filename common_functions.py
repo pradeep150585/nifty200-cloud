@@ -18,6 +18,8 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 # -----------------------
 # CONFIG
 # -----------------------
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+INDICES_FILE = os.path.join(BASE_DIR, "indices.txt")
 NIFTY200_URL = "https://archives.nseindia.com/content/indices/ind_nifty200list.csv"
 MOM_PERIOD = 10
 MIN_ROWS_REQUIRED = 80
@@ -400,7 +402,7 @@ def get_indices_summary(file_path, interval="30m"):
 
     for name, symbol in pairs:
         try:
-            df = yf.download(symbol, period="60d", interval=interval, progress=False)
+            df = yf.download(symbol, period="30d", interval=interval, progress=False)
 
             # Flatten MultiIndex and normalize columns
             if isinstance(df.columns, pd.MultiIndex):
