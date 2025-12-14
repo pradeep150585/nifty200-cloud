@@ -4,6 +4,9 @@ import time
 import pandas as pd
 import threading
 import os
+import os
+APP_DIR = os.path.dirname(os.path.abspath(__file__))
+INDICES_FILE_STREAMLIT = os.path.join(APP_DIR, "indices.txt")
 from common_functions import fetch_nifty200_symbols
 from run_all_intraday import main as run_intraday_main
 from run_all_swing import main as run_swing_main
@@ -208,9 +211,9 @@ def run_script_with_progress(script, excel_out):
 
     try:
         if script == "run_all_intraday.py":
-            indices_df, final_df = run_intraday_main(progress_callback, streamlit_mode=True)
+            indices_df, final_df = run_intraday_main(progress_callback, streamlit_mode=True, indices_file=INDICES_FILE_STREAMLIT)
         else:
-            indices_df, final_df = run_swing_main(progress_callback, streamlit_mode=True)
+            indices_df, final_df = run_swing_main(progress_callback, streamlit_mode=True, indices_file=INDICES_FILE_STREAMLIT)
 
         # ---- Normalize Indices Trend labels (UI layer) ----
         if isinstance(indices_df, pd.DataFrame) and not indices_df.empty:
