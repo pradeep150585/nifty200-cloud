@@ -174,7 +174,10 @@ def consolidate_outputs(nifty_trend, indices_file_path):
 # ---------------------------------------
 # Main Runner (Unified for Streamlit & Standalone)
 # ---------------------------------------
-def main(progress_callback=None, streamlit_mode=False, indices_file=INDICES_FILE):
+def main(progress_callback=None, streamlit_mode=False, indices_file=None):
+    if indices_file is None:
+        indices_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "indices.txt")
+
     total_steps = 8
     current = 0
 
