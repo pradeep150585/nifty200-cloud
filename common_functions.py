@@ -18,6 +18,23 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 # -----------------------
 # CONFIG
 # -----------------------
+INDICES_CONFIG = """
+Bank - ^NSEBANK |
+Auto - ^CNXAUTO |
+Energy - ^CNXENERGY |
+FMCG - ^CNXFMCG |
+Infrastructure - ^CNXINFRA |
+IT - ^CNXIT |
+Metal - ^CNXMETAL |
+PSE - ^CNXPSE |
+Reality - ^CNXREALTY |
+Consumer - ^CNXCONSUM |
+Commodities - ^CNXCMDT |
+Media - ^CNXMEDIA |
+Pharma - ^CNXPHARMA |
+Fianance - ^CNXFIN |
+PSU Bank - ^CNXPSUBANK
+"""
 NIFTY200_URL = "https://archives.nseindia.com/content/indices/ind_nifty200list.csv"
 MOM_PERIOD = 10
 MIN_ROWS_REQUIRED = 80
@@ -378,19 +395,19 @@ def get_indices_summary(file_path, interval="30m"):
 
     import os
 
-    if not os.path.exists(file_path):
-        print(f"⚠️ Missing indices file: {file_path}")
-        return pd.DataFrame()
-
-    # Read "Name - Symbol" pairs
+    # --- Use embedded Indices config ---
     pairs = []
-    with open(file_path, "r") as f:
-        for line in f:
+    try:
+        lines = INDICES_CONFIG.split("|")
+        for line in lines:
             line = line.strip()
             if not line or "-" not in line:
                 continue
             name, symbol = [x.strip() for x in line.split("-", 1)]
             pairs.append((name, symbol))
+    except Exception as e:
+        print(f"⚠️ Error parsing INDICES_CONFIG: {e}")
+        return pd.DataFrame()
 
     if not pairs:
         print("⚠️ No valid index entries found in indices.txt")
