@@ -10,7 +10,51 @@ INDICES_FILE_STREAMLIT = os.path.join(APP_DIR, "indices.txt")
 from common_functions import fetch_nifty200_symbols
 from run_all_intraday import main as run_intraday_main
 from run_all_swing import main as run_swing_main
+from run_all_currency_intraday_forex import main as run_forex_main
 
+# ==========================
+# Global Output Management
+# ==========================
+def get_main_container():
+    """Get or create the main output container."""
+    if "main_output" not in st.session_state:
+        st.session_state["main_output"] = st.container()
+    return st.session_state["main_output"]
+
+def clear_main_container():
+    """Completely clears the main output area before a new scan."""
+    if "main_output" in st.session_state:
+        st.session_state["main_output"].empty()
+        st.session_state["main_output"] = st.container()
+
+# --- Create or reset global container ---
+def reset_output_container():
+    """Fully clears all dynamic UI elements (progress, banners, tables)."""
+    if "output_container" not in st.session_state:
+        st.session_state["output_container"] = st.empty()
+    else:
+        st.session_state["output_container"].empty()
+        st.session_state["output_container"] = st.empty()
+    return st.session_state["output_container"]
+
+# ---------- Utility: Clear all Streamlit elements ----------
+def clear_all_streamlit_outputs():
+    # Clears progress, text, banners, and tables
+    for placeholder in st.session_state.get("active_placeholders", []):
+        try:
+            placeholder.empty()
+        except Exception:
+            pass
+    st.session_state["active_placeholders"] = []
+    st.empty()
+
+# ---------- Utility: Track Streamlit placeholders ----------
+def register_placeholder(p):
+    """Keeps track of placeholders for easy clearing."""
+    if "active_placeholders" not in st.session_state:
+        st.session_state["active_placeholders"] = []
+    st.session_state["active_placeholders"].append(p)
+    return p
 
 # ---------- Page Setup ----------
 st.set_page_config(page_title="ScanBot AI", layout="wide")
@@ -192,13 +236,11 @@ st.markdown("""
 st.markdown("<div class='main-heading'>ScanBot AI</div>", unsafe_allow_html=True)
 st.markdown("<div class='sub-heading'>Nifty 200 AI-powered Analysis Dashboard</div>", unsafe_allow_html=True)
 
-
 # ---------- Script Runner ----------
-def run_script_with_progress(script, excel_out):
-    progress_area = st.container()
-    with progress_area:
-        progress_bar = st.progress(0)
-        progress_text = st.empty()
+def run_script_with_progress(parent, script, excel_out):
+    with parent:
+        progress_bar = register_placeholder(st.progress(0))
+        progress_text = register_placeholder(st.empty())
 
     progress_value = 0
 
@@ -232,11 +274,20 @@ def run_script_with_progress(script, excel_out):
 
         # ---- Format Indices numeric columns (2 decimals) ----
         if isinstance(indices_df, pd.DataFrame) and not indices_df.empty:
-            for col in ["RSI", "Change%"]:
+            for col in ["RSI", "ADX", "Change%"]:
                 if col in indices_df.columns:
                     indices_df[col] = pd.to_numeric(
                         indices_df[col], errors="coerce"
                     ).round(2)
+
+        # ---- Sort Indices: RSI ↓ then ADX ↓ ----
+        if isinstance(indices_df, pd.DataFrame) and not indices_df.empty:
+            sort_cols = [c for c in ["RSI", "ADX"] if c in indices_df.columns]
+            if sort_cols:
+                indices_df = indices_df.sort_values(
+                    by=sort_cols,
+                    ascending=[False] * len(sort_cols)
+                )
 
         # --- Display Indices Summary Table ---
         if isinstance(indices_df, pd.DataFrame) and not indices_df.empty:
@@ -262,12 +313,20 @@ def run_script_with_progress(script, excel_out):
                 else:
                     return ['color:#000000;font-weight:400;'] * len(r)
 
+            display_cols = indices_df.columns.tolist()
+
+            if "ADX" not in display_cols and "ADX" in indices_df.columns:
+                display_cols.insert(display_cols.index("RSI") + 1, "ADX")
+
+            indices_df = indices_df[display_cols]
+
             styled_indices = (
                 indices_df
                 .style
                 .apply(style_indices_row, axis=1)
                 .format({
                     "RSI": "{:.2f}",
+                    "ADX": "{:.2f}",
                     "Change%": "{:.2f}"
                 })
             )
@@ -353,12 +412,17 @@ def run_script_with_progress(script, excel_out):
                     except:
                         st.markdown("<div style='text-align:left; font-size:1.2rem; margin:10px 0; color:#bbb;'><b>Nifty Trend:</b> Not Available</div>", unsafe_allow_html=True)
 
+                    for col in ["RSI", "ADX"]:
+                        if col in df.columns:
+                            df[col] = pd.to_numeric(df[col], errors="coerce").round(2)
+
                     styled = (
                         df.style
                         .apply(style_row, axis=1)
                         .format({
                             "CMP": "{:.2f}",
                             "RSI": "{:.2f}",
+                            "ADX": "{:.2f}",
                             "Change%": "{:.2f}"
                         })
                     )
@@ -380,29 +444,104 @@ def run_script_with_progress(script, excel_out):
         else:
             st.error("Output file not found.")
 
+def run_forex_with_progress(parent):
+    progress_bar = register_placeholder(st.progress(0))
+    progress_text = register_placeholder(st.empty())
+
+    def progress_callback(p):
+        progress_bar.progress(p)
+
+        # ✅ Same text style as Intraday/Swing
+        if p < 100:
+            progress_text.markdown(
+                f"<div style='text-align:center;'>Running... {p}%</div>",
+                unsafe_allow_html=True
+            )
+        else:
+            progress_text.markdown(
+                "<div style='text-align:center;'>Completed. Loading results…</div>",
+                unsafe_allow_html=True
+            )
+
+    # ---- Run Forex Scanner ----
+    final_df = run_forex_main(
+        progress_callback=progress_callback,
+        streamlit_mode=True
+    )
+
+    if final_df is None or final_df.empty:
+        st.warning("⚠ No Strong Buy/Sell signals found in Forex/Crypto.")
+        return
+
+    # ✅ Truncate RSI & ADX
+    for col in ["RSI", "ADX"]:
+        if col in final_df.columns:
+            final_df[col] = pd.to_numeric(final_df[col], errors="coerce").round(2)
+
+    def style_row(r):
+        if r["Trend"] == "Strong Buy":
+            return ['color:#1abc9c;font-weight:400;'] * len(r)
+        elif r["Trend"] == "Strong Sell":
+            return ['color:#e74c3c;font-weight:400;'] * len(r)
+        return [''] * len(r)
+
+    styled = (
+        final_df.style
+        .apply(style_row, axis=1)
+        .format({
+            "CMP": "{:.2f}",
+            "RSI": "{:.2f}",
+            "ADX": "{:.2f}",
+            "Change%": "{:.2f}"
+        })
+    )
+
+    styled = styled.hide(axis="index") if hasattr(styled, "hide") else styled.hide_index()
+
+    st.markdown(
+        "<div style='font-size:1.3rem; margin:10px 0;'><b>📈 Forex / Crypto Strong Signals</b></div>",
+        unsafe_allow_html=True
+    )
+
+    html = styled.to_html(classes="table table-hover no-border-table")
+    st.markdown(f"<div class='table-container'>{html}</div>", unsafe_allow_html=True)
+
 # ---------- Buttons ----------
 st.markdown("<div class='button-container'>", unsafe_allow_html=True)
-col1, col2 = st.columns([1, 1])
+col1, col2, col3 = st.columns([1, 1, 1])
+
 run_intraday = col1.button("Run Intraday Scanner", use_container_width=True)
 run_swing = col2.button("Run Swing Scanner", use_container_width=True)
+run_forex = col3.button("Run Forex / Crypto Scanner", use_container_width=True)
+
 st.markdown("</div>", unsafe_allow_html=True)
 
-if run_intraday or run_swing:
-    try:
-        # Step 1: Always download latest Nifty 200 list
-        st.info("🌐 Downloading latest Nifty 200 stock list from NSE...")
-        fetch_nifty200_symbols()
-        st.success("✅ Nifty 200 list downloaded successfully!")
+output_placeholder = st.container()
 
-        # Step 2: Run selected scanner
-        if run_intraday:
-            st.info("🚀 Running Intraday Scanner...")
-            run_script_with_progress("run_all_intraday.py", "Nifty200_Consolidated_Output.xlsx")
-        elif run_swing:
-            st.info("📊 Running Swing Scanner...")
-            run_script_with_progress("run_all_swing.py", "Nifty200_Consolidated_Output.xlsx")
+if run_intraday or run_swing or run_forex:
+    clear_main_container()
+    output_placeholder = get_main_container()
+    with output_placeholder:        
 
-    except SystemExit as e:
-        st.error(f"❌ {e}")
-    except Exception as e:
-        st.error(f"⚠️ Unexpected error: {e}")
+        try:
+            if run_intraday or run_swing:
+            # Step 1: Always download latest Nifty 200 list
+                st.info("🌐 Downloading latest Nifty 200 stock list from NSE...")
+                fetch_nifty200_symbols()
+                st.success("✅ Nifty 200 list downloaded successfully!")
+
+            # Step 2: Run selected scanner
+            if run_intraday:
+                st.info("🚀 Running Intraday Scanner...")
+                run_script_with_progress(output_placeholder, "run_all_intraday.py", "Nifty200_Consolidated_Output.xlsx")
+            elif run_swing:
+                st.info("📊 Running Swing Scanner...")
+                run_script_with_progress(output_placeholder, "run_all_swing.py", "Nifty200_Consolidated_Output.xlsx")
+            elif run_forex:
+                st.info("💱 Running Forex / Crypto Scanner...")
+                run_forex_with_progress(output_placeholder)
+
+        except SystemExit as e:
+            st.error(f"❌ {e}")
+        except Exception as e:
+            st.error(f"⚠️ Unexpected error: {e}")

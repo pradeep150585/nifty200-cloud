@@ -44,6 +44,56 @@ SLEEP_BETWEEN_BATCHES = 0.5
 # -----------------------
 # UTILITIES
 # -----------------------
+def get_forex_symbols():
+    # -------------------------------
+    # Top 20 Forex Pairs
+    # -------------------------------
+    forex_pairs = [
+        "EURUSD=X", "GBPUSD=X", "USDJPY=X", "USDCHF=X", "AUDUSD=X",
+        "USDCAD=X", "NZDUSD=X", "EURGBP=X", "EURJPY=X", "GBPJPY=X",
+        "EURCHF=X", "GBPCHF=X", "AUDJPY=X", "CADJPY=X", "CHFJPY=X",
+        "AUDNZD=X", "EURAUD=X", "GBPAUD=X", "EURCAD=X", "GBPCAD=X"
+    ]
+
+    # -------------------------------
+    # Top 5 Commodities
+    # -------------------------------
+    commodities = [
+        "SI=F",       # Silver Spot
+        "GC=F",       # Gold Spot
+        "CL=F",       # Crude Oil
+        "NG=F",       # Natural Gas
+        "HG=F"        # Copper
+    ]
+
+    # -------------------------------
+    # Top 10 Cryptocurrencies
+    # -------------------------------
+    crypto = [
+        "BTC-USD",    # Bitcoin
+        "ETH-USD",    # Ethereum
+        "BNB-USD",    # Binance Coin
+        "SOL-USD",    # Solana
+        "XRP-USD",    # Ripple
+        "ADA-USD",    # Cardano
+        "DOGE-USD",   # Dogecoin
+        "AVAX-USD",   # Avalanche
+        "DOT-USD",    # Polkadot
+        "TRX-USD"     # Tron
+    ]
+
+    return forex_pairs + commodities + crypto
+
+def safe_load(file_path):
+    try:
+        if os.path.exists(file_path):
+            df = pd.read_excel(file_path)
+            if isinstance(df, pd.DataFrame) and not df.empty:
+                return df
+    except Exception as e:
+        print(f"⚠ Error reading {file_path}: {e}")
+    return pd.DataFrame()
+
 def fetch_nifty200_symbols() -> List[str]:
     """
     Always download the Nifty 200 stock list freshly from NSE API.
@@ -172,6 +222,7 @@ def compute_indicators_vectorized(df: pd.DataFrame, mom_period=MOM_PERIOD) -> pd
     DIm = 100 * safe_div(DMm_w, df["ATR"])
     DX = 100 * safe_div((DIp - DIm).abs(), (DIp + DIm))
     ADX = wilder_smooth(DX, 14)
+    df["ADX"] = ADX
     df["ADX_Rating"] = ["Buy" if (a > 30 and b > c) else ("Sell" if (a > 30 and c > b) else "Neutral")
                         for a, b, c in zip(ADX, DIp, DIm)]
 
@@ -258,7 +309,8 @@ def process_symbol_from_df(symbol: str, df_tk: pd.DataFrame):
             "Net_Score": int(last["Net_Score"]),
             "Weighted_Net_Score": int(last["Weighted_Net_Score"]),
             "Summary": last["Summary"],
-            "RSI": round(float(last.get("RSI", np.nan)), 2) if "RSI" in df_ind.columns else np.nan
+            "RSI": round(float(last.get("RSI", np.nan)), 2) if "RSI" in df_ind.columns else np.nan,
+            "ADX": round(float(last.get("ADX", np.nan)), 2) if "ADX" in df_ind.columns else np.nan
         }
     except Exception:
         return None
@@ -286,10 +338,14 @@ def process_symbol_download_with_volume(symbol, period, interval):
 # -----------------------
 # RUN SCANNER
 # -----------------------
-def run_scanner(period, interval, output_filename, batch_size=20, verbose=True):
-    symbols = fetch_nifty200_symbols()
-    results = []
-
+def run_scanner(period, interval, output_filename, batch_size=20, verbose=True, symbol_source="nifty"):
+    results = []   # ✅ FIX: initialize results
+    """Generic scanner for both stocks and forex pairs."""
+    if symbol_source == "forex":
+        symbols = get_forex_symbols()
+    else:
+        symbols = fetch_nifty200_symbols()
+    
     for batch in tqdm(list(chunked(symbols, batch_size)), desc="Batches", ncols=120):
         tickers_str = " ".join(batch)
         try:
@@ -442,6 +498,7 @@ def get_indices_summary(file_path, interval="30m"):
             prev_price = float(prev["Close"])
             change_pct = round((cmp_price - prev_price) / prev_price * 100, 2)
             rsi = round(float(last.get("RSI", np.nan)), 2)
+            adx = round(float(last.get("ADX", np.nan)), 2)
 
             summary = last.get("Summary", "Neutral")
 
@@ -461,6 +518,7 @@ def get_indices_summary(file_path, interval="30m"):
                 "Indices Name": name,
                 "Trend": trend,
                 "RSI": rsi,
+                "ADX": adx,
                 "Change%": change_pct
             })
 

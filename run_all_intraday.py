@@ -77,8 +77,8 @@ def consolidate_outputs(nifty_trend, indices_file):
     # --- Standardize and rename ---
     df1 = df1.rename(columns={"Summary": "Summary_1M"})[["Symbol", "Summary_1M"]]
     df2 = df2.rename(columns={"Summary": "Summary_2M"})[["Symbol", "Summary_2M"]]
-    df3 = df3.rename(columns={"Summary": "Summary_5M", "CMP": "CMP_5M", "RSI": "RSI"})[
-        ["Symbol", "CMP_5M", "Summary_5M", "RSI"]
+    df3 = df3.rename(columns={"Summary": "Summary_5M", "CMP": "CMP_5M", "RSI": "RSI", "ADX": "ADX"})[
+        ["Symbol", "CMP_5M", "Summary_5M", "RSI", "ADX"]
     ]
     df4 = df4.rename(columns={"Summary": "Summary_15M"})[["Symbol", "Summary_15M"]]
     df5 = df5.rename(columns={"Summary": "Summary_30M", "Change%": "ChangePct", "VolumeRatio": "Volume"})[
@@ -110,7 +110,7 @@ def consolidate_outputs(nifty_trend, indices_file):
         return False
 
     mask = final.apply(strong_condition, axis=1)
-    filtered = final.loc[mask, ["Symbol", "CMP_5M", "Summary_1M", "Summary_30M", "Volume", "RSI"]].rename(
+    filtered = final.loc[mask, ["Symbol", "CMP_5M", "Summary_1M", "Summary_30M", "Volume", "RSI", "ADX"]].rename(
         columns={"CMP_5M": "CMP", "Summary_1M": "Summary_Short", "Summary_30M": "Summary_Long"}
     )
 
@@ -139,12 +139,12 @@ def consolidate_outputs(nifty_trend, indices_file):
 
     filtered["VolumeValue"] = filtered["Volume"].apply(parse_volume)
     filtered = filtered[filtered["VolumeValue"] > 1.0]
-    filtered = filtered.sort_values(by="VolumeValue", ascending=False).drop(columns=["VolumeValue"])
+    filtered = filtered.sort_values(by=["VolumeValue", "RSI", "ADX"], ascending=[False, False, False]).drop(columns=["VolumeValue"])
 
     # --- Indices Summary ---
     indices_summary = get_indices_summary(indices_file, interval="30m")
     if not indices_summary.empty:
-        indices_summary = indices_summary[["Indices Name", "Trend", "RSI", "Change%"]]
+        indices_summary = indices_summary[["Indices Name", "Trend", "RSI", "ADX", "Change%"]]
         indices_summary = indices_summary.round(2)
         print("\n" + "="*80)
         print("📊 INDICES SUMMARY")
@@ -152,6 +152,7 @@ def consolidate_outputs(nifty_trend, indices_file):
         print(indices_summary.to_string(index=False))
     else:
         print("\n⚠️ No indices data found or unable to fetch.")
+    indices_summary = indices_summary.sort_values(by=["RSI", "ADX"], ascending=False)
 
     # --- Final Stock Table ---
     if not filtered.empty:
@@ -161,6 +162,11 @@ def consolidate_outputs(nifty_trend, indices_file):
         print(f"📈 FINAL STRONG SIGNALS — NIFTY TREND: {nifty_trend.upper()}")
         print("="*80)
         display_cols = ["Symbol", "CMP", "Trend", "RSI"]
+
+        if "ADX" in filtered.columns and not filtered["ADX"].isna().all():
+            filtered["ADX"] = filtered["ADX"].round(2)
+            display_cols.append("ADX")
+
         if "Volume" in filtered.columns:
             display_cols.insert(3, "Volume")
         print(filtered[display_cols].to_string(index=False))
@@ -241,31 +247,7 @@ def main(progress_callback=None, streamlit_mode=False, indices_file=None):
     if streamlit_mode:
         return indices_summary, final_df
 
-    # --- Standalone Mode ---
-    if not indices_summary.empty:
-        print("\n" + "="*80)
-        print("📊 INDICES SUMMARY")
-        print("="*80)
-        print(indices_summary[["Indices Name", "Trend", "RSI", "Change%"]].to_string(index=False))
-    else:
-        print("\n⚠️ No indices data found or unable to fetch.")
-
-    if not final_df.empty:
-        print("\n" + "="*80)
-        print("📈 FINAL STRONG SIGNALS — INTRADAY")
-        print("="*80)
-
-        display_cols = ["Symbol", "CMP", "Trend", "RSI"]
-        if "Volume" in final_df.columns:
-            display_cols.insert(3, "Volume")
-
-        final_df = final_df.round(2)
-        print(final_df[display_cols].to_string(index=False))
-    else:
-        print("\n⚠️ No Strong Buy/Sell signals found.")
-
     return indices_summary, final_df
-
 
 # ---------------------------------------
 # Entry Point for Direct Run
